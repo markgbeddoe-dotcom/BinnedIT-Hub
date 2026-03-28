@@ -423,7 +423,7 @@ export default function PricingTab({ monthIndex = 7, monthLabel = 'Feb 2026' }) 
                   {/* Market context */}
                   {d.market && (
                     <div style={{ background: B.cardBg, border: '1px solid ' + B.cardBorder, borderRadius: 6, padding: 10, marginBottom: 16, fontSize: 11 }}>
-                      <strong>Market Position:</strong> Your your rate ${d.feb.avgRate || d.ytdAlloc.avgRate} vs market range {d.market.label}.
+                      <strong>Market Position:</strong> Your rate ${d.feb.avgRate || d.ytdAlloc.avgRate} vs market range {d.market.label}.
                       {d.marketPosition === 'above' && <span style={{ color: B.red }}> You are ABOVE market — price increases carry high risk of losing volume.</span>}
                       {d.marketPosition === 'within' && <span style={{ color: B.textSecondary }}> Within range — room for modest adjustment.</span>}
                       {d.marketPosition === 'below' && <span style={{ color: B.green }}> BELOW market — strong case for price increase.</span>}

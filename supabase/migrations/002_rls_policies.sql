@@ -1,11 +1,9 @@
 -- ============================================================
 -- Migration 002: Row Level Security Policies
--- All data is scoped to authenticated users only.
--- For now: single-org model — all authenticated users share data.
--- Owner role has write access; others are read-only except where noted.
+-- Idempotent — safe to re-run. Drops existing policies first.
 -- ============================================================
 
--- Enable RLS on all tables
+-- Enable RLS on all tables (safe to run multiple times)
 ALTER TABLE public.profiles               ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.monthly_reports        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.financials_monthly     ENABLE ROW LEVEL SECURITY;
@@ -32,6 +30,10 @@ $$;
 -- ----------------------------------------
 -- PROFILES
 -- ----------------------------------------
+DROP POLICY IF EXISTS "Users can read own profile"      ON public.profiles;
+DROP POLICY IF EXISTS "Owners can read all profiles"    ON public.profiles;
+DROP POLICY IF EXISTS "Users can update own profile"    ON public.profiles;
+
 CREATE POLICY "Users can read own profile"
   ON public.profiles FOR SELECT
   USING (id = auth.uid());
@@ -45,8 +47,12 @@ CREATE POLICY "Users can update own profile"
   USING (id = auth.uid());
 
 -- ----------------------------------------
--- MONTHLY REPORTS — all auth users read; owner/bookkeeper write
+-- MONTHLY REPORTS
 -- ----------------------------------------
+DROP POLICY IF EXISTS "Authenticated users can read reports"     ON public.monthly_reports;
+DROP POLICY IF EXISTS "Owner and bookkeeper can insert reports"  ON public.monthly_reports;
+DROP POLICY IF EXISTS "Owner can update reports"                 ON public.monthly_reports;
+
 CREATE POLICY "Authenticated users can read reports"
   ON public.monthly_reports FOR SELECT
   USING (auth.uid() IS NOT NULL);
@@ -60,8 +66,11 @@ CREATE POLICY "Owner can update reports"
   USING (public.current_user_role() = 'owner');
 
 -- ----------------------------------------
--- FINANCIAL DATA — read all auth; write owner/bookkeeper
+-- FINANCIAL DATA
 -- ----------------------------------------
+DROP POLICY IF EXISTS "Auth users read financials"        ON public.financials_monthly;
+DROP POLICY IF EXISTS "Owner/bookkeeper write financials" ON public.financials_monthly;
+
 CREATE POLICY "Auth users read financials"
   ON public.financials_monthly FOR SELECT
   USING (auth.uid() IS NOT NULL);
@@ -69,6 +78,9 @@ CREATE POLICY "Auth users read financials"
 CREATE POLICY "Owner/bookkeeper write financials"
   ON public.financials_monthly FOR INSERT
   WITH CHECK (public.current_user_role() IN ('owner','bookkeeper'));
+
+DROP POLICY IF EXISTS "Auth users read balance sheet"        ON public.balance_sheet_monthly;
+DROP POLICY IF EXISTS "Owner/bookkeeper write balance sheet" ON public.balance_sheet_monthly;
 
 CREATE POLICY "Auth users read balance sheet"
   ON public.balance_sheet_monthly FOR SELECT
@@ -78,6 +90,9 @@ CREATE POLICY "Owner/bookkeeper write balance sheet"
   ON public.balance_sheet_monthly FOR INSERT
   WITH CHECK (public.current_user_role() IN ('owner','bookkeeper'));
 
+DROP POLICY IF EXISTS "Auth users read debtors"        ON public.debtors_monthly;
+DROP POLICY IF EXISTS "Owner/bookkeeper write debtors" ON public.debtors_monthly;
+
 CREATE POLICY "Auth users read debtors"
   ON public.debtors_monthly FOR SELECT
   USING (auth.uid() IS NOT NULL);
@@ -85,6 +100,9 @@ CREATE POLICY "Auth users read debtors"
 CREATE POLICY "Owner/bookkeeper write debtors"
   ON public.debtors_monthly FOR INSERT
   WITH CHECK (public.current_user_role() IN ('owner','bookkeeper'));
+
+DROP POLICY IF EXISTS "Auth users read bin performance"        ON public.bin_type_performance;
+DROP POLICY IF EXISTS "Owner/bookkeeper write bin performance" ON public.bin_type_performance;
 
 CREATE POLICY "Auth users read bin performance"
   ON public.bin_type_performance FOR SELECT
@@ -97,6 +115,9 @@ CREATE POLICY "Owner/bookkeeper write bin performance"
 -- ----------------------------------------
 -- CUSTOMERS
 -- ----------------------------------------
+DROP POLICY IF EXISTS "Auth users read customers"    ON public.customers;
+DROP POLICY IF EXISTS "Owner/manager write customers" ON public.customers;
+
 CREATE POLICY "Auth users read customers"
   ON public.customers FOR SELECT
   USING (auth.uid() IS NOT NULL);
@@ -104,6 +125,9 @@ CREATE POLICY "Auth users read customers"
 CREATE POLICY "Owner/manager write customers"
   ON public.customers FOR INSERT
   WITH CHECK (public.current_user_role() IN ('owner','manager'));
+
+DROP POLICY IF EXISTS "Auth users read acquisitions"        ON public.customer_acquisitions;
+DROP POLICY IF EXISTS "Owner/bookkeeper write acquisitions" ON public.customer_acquisitions;
 
 CREATE POLICY "Auth users read acquisitions"
   ON public.customer_acquisitions FOR SELECT
@@ -114,8 +138,12 @@ CREATE POLICY "Owner/bookkeeper write acquisitions"
   WITH CHECK (public.current_user_role() IN ('owner','bookkeeper'));
 
 -- ----------------------------------------
--- COMPETITOR RATES — all read; owner/manager write
+-- COMPETITOR RATES
 -- ----------------------------------------
+DROP POLICY IF EXISTS "Auth users read competitor rates"       ON public.competitor_rates;
+DROP POLICY IF EXISTS "Owner/manager insert competitor rates"  ON public.competitor_rates;
+DROP POLICY IF EXISTS "Owner/manager update competitor rates"  ON public.competitor_rates;
+
 CREATE POLICY "Auth users read competitor rates"
   ON public.competitor_rates FOR SELECT
   USING (auth.uid() IS NOT NULL);
@@ -131,6 +159,9 @@ CREATE POLICY "Owner/manager update competitor rates"
 -- ----------------------------------------
 -- COMPLIANCE RECORDS
 -- ----------------------------------------
+DROP POLICY IF EXISTS "Auth users read compliance"        ON public.compliance_records;
+DROP POLICY IF EXISTS "Owner/bookkeeper write compliance" ON public.compliance_records;
+
 CREATE POLICY "Auth users read compliance"
   ON public.compliance_records FOR SELECT
   USING (auth.uid() IS NOT NULL);
@@ -140,8 +171,12 @@ CREATE POLICY "Owner/bookkeeper write compliance"
   WITH CHECK (public.current_user_role() IN ('owner','bookkeeper'));
 
 -- ----------------------------------------
--- WORK PLAN ITEMS — all read; owner manages library
+-- WORK PLAN ITEMS
 -- ----------------------------------------
+DROP POLICY IF EXISTS "Auth users read work plan items" ON public.work_plan_items;
+DROP POLICY IF EXISTS "Owner writes work plan items"    ON public.work_plan_items;
+DROP POLICY IF EXISTS "Owner updates work plan items"   ON public.work_plan_items;
+
 CREATE POLICY "Auth users read work plan items"
   ON public.work_plan_items FOR SELECT
   USING (auth.uid() IS NOT NULL);
@@ -155,8 +190,12 @@ CREATE POLICY "Owner updates work plan items"
   USING (public.current_user_role() = 'owner');
 
 -- ----------------------------------------
--- WORK PLAN COMPLETIONS — all auth can mark complete
+-- WORK PLAN COMPLETIONS
 -- ----------------------------------------
+DROP POLICY IF EXISTS "Auth users read completions"   ON public.work_plan_completions;
+DROP POLICY IF EXISTS "Auth users insert completions" ON public.work_plan_completions;
+DROP POLICY IF EXISTS "Users delete own completions"  ON public.work_plan_completions;
+
 CREATE POLICY "Auth users read completions"
   ON public.work_plan_completions FOR SELECT
   USING (auth.uid() IS NOT NULL);
@@ -170,8 +209,12 @@ CREATE POLICY "Users delete own completions"
   USING (completed_by = auth.uid() OR public.current_user_role() = 'owner');
 
 -- ----------------------------------------
--- ALERTS LOG — all read; system/owner write
+-- ALERTS LOG
 -- ----------------------------------------
+DROP POLICY IF EXISTS "Auth users read alerts"          ON public.alerts_log;
+DROP POLICY IF EXISTS "Owner/bookkeeper insert alerts"  ON public.alerts_log;
+DROP POLICY IF EXISTS "Owner can acknowledge alerts"    ON public.alerts_log;
+
 CREATE POLICY "Auth users read alerts"
   ON public.alerts_log FOR SELECT
   USING (auth.uid() IS NOT NULL);
@@ -187,6 +230,9 @@ CREATE POLICY "Owner can acknowledge alerts"
 -- ----------------------------------------
 -- FILE UPLOADS
 -- ----------------------------------------
+DROP POLICY IF EXISTS "Auth users read uploads"          ON public.file_uploads;
+DROP POLICY IF EXISTS "Owner/bookkeeper insert uploads"  ON public.file_uploads;
+
 CREATE POLICY "Auth users read uploads"
   ON public.file_uploads FOR SELECT
   USING (auth.uid() IS NOT NULL);
@@ -196,8 +242,12 @@ CREATE POLICY "Owner/bookkeeper insert uploads"
   WITH CHECK (public.current_user_role() IN ('owner','bookkeeper'));
 
 -- ----------------------------------------
--- AI CHAT SESSIONS — users own their sessions
+-- AI CHAT SESSIONS
 -- ----------------------------------------
+DROP POLICY IF EXISTS "Users read own chat sessions"    ON public.ai_chat_sessions;
+DROP POLICY IF EXISTS "Users insert own chat sessions"  ON public.ai_chat_sessions;
+DROP POLICY IF EXISTS "Users update own chat sessions"  ON public.ai_chat_sessions;
+
 CREATE POLICY "Users read own chat sessions"
   ON public.ai_chat_sessions FOR SELECT
   USING (user_id = auth.uid());
@@ -211,8 +261,12 @@ CREATE POLICY "Users update own chat sessions"
   USING (user_id = auth.uid());
 
 -- ----------------------------------------
--- ALERT THRESHOLDS — all read; owner writes
+-- ALERT THRESHOLDS
 -- ----------------------------------------
+DROP POLICY IF EXISTS "Auth users read thresholds"  ON public.alert_thresholds;
+DROP POLICY IF EXISTS "Owner write thresholds"      ON public.alert_thresholds;
+DROP POLICY IF EXISTS "Owner update thresholds"     ON public.alert_thresholds;
+
 CREATE POLICY "Auth users read thresholds"
   ON public.alert_thresholds FOR SELECT
   USING (auth.uid() IS NOT NULL);

@@ -41,6 +41,12 @@ export const AlertItem = ({severity,text}) => {
   );
 };
 
+export const LoadingSkeleton = ({ height = 200, message = 'Loading data…' }) => (
+  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height, background:'#1a1a1a', borderRadius:8, color:'#666', fontSize:14 }}>
+    {message}
+  </div>
+)
+
 export const CustomTooltip = ({active,payload,label,formatter}) => {
   if (!active||!payload||!payload.length) return null;
   return (
