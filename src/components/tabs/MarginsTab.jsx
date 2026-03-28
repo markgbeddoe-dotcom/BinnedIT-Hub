@@ -4,39 +4,82 @@ import { B, fmt, fmtFull } from '../../theme';
 import { KPITile, SectionHeader, ChartCard, CustomTooltip } from '../UIComponents';
 import * as D from '../../data/financials';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { useFinancials, useYTDFinancials } from '../../hooks/useMonthData';
 
-export default function MarginsTab({ data, selectedMonth, monthCount, monthLabel }) {
+export default function MarginsTab({ reportId, reportMonth, selectedMonth, monthCount, monthLabel }) {
   const { isMobile } = useBreakpoint();
   const mi = monthCount - 1;
   const monthSlice = D.months.slice(0, monthCount);
-  const slicedCOS = D.totalCOS.slice(0, monthCount);
-  const slicedOpex = D.totalOpex.slice(0, monthCount);
+
+  const { data: financials } = useFinancials(reportMonth);
+  const { data: ytdRows } = useYTDFinancials(reportMonth);
+
   const sum = arr => arr.reduce((a, b) => a + b, 0);
 
-  const monthlyData = monthSlice.map((m, i) => ({
-    name: m,
-    cos: D.totalCOS[i],
-    opex: D.totalOpex[i],
-    np: D.netProfit[i],
-    gm: D.gmPct[i],
-  }));
+  // Build chart data — prefer Supabase YTD rows
+  let monthlyData, costData;
+  if (ytdRows && ytdRows.length > 0) {
+    monthlyData = ytdRows.map(r => {
+      const d = new Date(r.report_month);
+      const name = d.toLocaleDateString('en-AU', { month: 'short' });
+      return {
+        name,
+        cos: r.cos_total || 0,
+        opex: r.opex_total || 0,
+        np: r.net_profit || 0,
+        gm: r.gross_margin_pct || 0,
+      };
+    });
+    costData = ytdRows.map(r => {
+      const d = new Date(r.report_month);
+      const name = d.toLocaleDateString('en-AU', { month: 'short' });
+      return {
+        name,
+        Wages: r.cos_wages || 0,
+        Fuel: r.cos_fuel || 0,
+        Repairs: r.cos_repairs || 0,
+        Rent: r.opex_rent || 0,
+      };
+    });
+  } else {
+    monthlyData = monthSlice.map((m, i) => ({
+      name: m,
+      cos: D.totalCOS[i],
+      opex: D.totalOpex[i],
+      np: D.netProfit[i],
+      gm: D.gmPct[i],
+    }));
+    costData = monthSlice.map((m, i) => ({
+      name: m,
+      Wages: D.wages[i],
+      Fuel: D.fuelCosts[i],
+      Repairs: D.repairs[i],
+      Rent: D.rent[i],
+    }));
+  }
 
-  const costData = monthSlice.map((m, i) => ({
-    name: m,
-    Wages: D.wages[i],
-    Fuel: D.fuelCosts[i],
-    Repairs: D.repairs[i],
-    Rent: D.rent[i],
-  }));
+  // KPI values — prefer live data, fallback to D.*
+  const curCOS = financials?.cos_total ?? D.totalCOS[mi];
+  const curOpex = financials?.opex_total ?? D.totalOpex[mi];
+  const curFuel = financials?.cos_fuel ?? D.fuelCosts[mi];
+  const prevOpex = mi > 0
+    ? (ytdRows && ytdRows.length >= 2 ? (ytdRows[ytdRows.length - 2]?.opex_total || D.totalOpex[mi - 1]) : D.totalOpex[mi - 1])
+    : 0;
+
+  const avgCOS = ytdRows && ytdRows.length > 0
+    ? ytdRows.reduce((a, r) => a + (r.cos_total || 0), 0) / ytdRows.length
+    : sum(D.totalCOS.slice(0, monthCount)) / monthCount;
+
+  const opexTrend = prevOpex > 0 ? Math.round((curOpex / prevOpex - 1) * 100) : 0;
 
   return (
     <div>
       <SectionHeader title="Margin & Cost Analysis" subtitle={`COS, operating expenses, and cost drivers — YTD to ${monthLabel}`} />
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
-        <KPITile label={`${monthLabel} COS`} value={fmtFull(slicedCOS[mi])} sub={mi === 7 ? '! Likely incomplete' : ''} status={mi === 7 ? 'red' : 'yellow'} />
-        <KPITile label="Avg Monthly COS" value={fmtFull(sum(slicedCOS) / monthCount)} status="yellow" />
-        <KPITile label={`${monthLabel} Opex`} value={fmtFull(slicedOpex[mi])} trend={mi > 0 ? Math.round((slicedOpex[mi] / slicedOpex[mi - 1] - 1) * 100) : 0} status="green" />
-        <KPITile label={`${monthLabel} Fuel`} value={fmtFull(D.fuelCosts[mi])} sub={mi === 7 ? '! Appears unposted' : ''} status={mi === 7 ? 'red' : 'yellow'} />
+        <KPITile label={`${monthLabel} COS`} value={fmtFull(curCOS)} sub={mi === 7 ? '! Likely incomplete' : ''} status={mi === 7 ? 'red' : 'yellow'} />
+        <KPITile label="Avg Monthly COS" value={fmtFull(avgCOS)} status="yellow" />
+        <KPITile label={`${monthLabel} Opex`} value={fmtFull(curOpex)} trend={opexTrend} status="green" />
+        <KPITile label={`${monthLabel} Fuel`} value={fmtFull(curFuel)} sub={mi === 7 ? '! Appears unposted' : ''} status={mi === 7 ? 'red' : 'yellow'} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>

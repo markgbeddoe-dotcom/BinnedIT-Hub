@@ -3,26 +3,52 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 import { B, fmt, fmtFull } from '../../theme';
 import { SectionHeader, ChartCard, CustomTooltip } from '../UIComponents';
 import * as D from '../../data/financials';
+import { useYTDFinancials } from '../../hooks/useMonthData';
 
-export default function RevenueTab({ data, selectedMonth, monthCount, monthLabel }) {
+export default function RevenueTab({ reportId, reportMonth, selectedMonth, monthCount, monthLabel }) {
   const monthSlice = D.months.slice(0, monthCount);
 
-  const revCatData = monthSlice.map((m, i) => ({
-    name: m,
-    GW: D.revByCategory.generalWaste[i],
-    Asb: D.revByCategory.asbestos[i],
-    Soil: D.revByCategory.soil[i],
-    Green: D.revByCategory.greenWaste[i],
-    Other: D.revByCategory.other[i],
-  }));
+  const { data: ytdRows } = useYTDFinancials(reportMonth);
 
-  const pieMixData = [
-    { name: 'General Waste', value: D.revByCategory.generalWaste.slice(0, monthCount).reduce((a, b) => a + b, 0) },
-    { name: 'Asbestos', value: D.revByCategory.asbestos.slice(0, monthCount).reduce((a, b) => a + b, 0) },
-    { name: 'Soil', value: D.revByCategory.soil.slice(0, monthCount).reduce((a, b) => a + b, 0) },
-    { name: 'Green Waste', value: D.revByCategory.greenWaste.slice(0, monthCount).reduce((a, b) => a + b, 0) },
-    { name: 'Other', value: D.revByCategory.other.slice(0, monthCount).reduce((a, b) => a + b, 0) },
-  ];
+  // Build category data — if Supabase has it, use it; else fallback to D.*
+  let revCatData, pieMixData;
+  if (ytdRows && ytdRows.length > 0) {
+    revCatData = ytdRows.map(r => {
+      const d = new Date(r.report_month);
+      const name = d.toLocaleDateString('en-AU', { month: 'short' });
+      return {
+        name,
+        GW: r.rev_general || 0,
+        Asb: r.rev_asbestos || 0,
+        Soil: r.rev_soil || 0,
+        Green: r.rev_green || 0,
+        Other: r.rev_other || 0,
+      };
+    });
+    pieMixData = [
+      { name: 'General Waste', value: ytdRows.reduce((a, r) => a + (r.rev_general || 0), 0) },
+      { name: 'Asbestos', value: ytdRows.reduce((a, r) => a + (r.rev_asbestos || 0), 0) },
+      { name: 'Soil', value: ytdRows.reduce((a, r) => a + (r.rev_soil || 0), 0) },
+      { name: 'Green Waste', value: ytdRows.reduce((a, r) => a + (r.rev_green || 0), 0) },
+      { name: 'Other', value: ytdRows.reduce((a, r) => a + (r.rev_other || 0), 0) },
+    ];
+  } else {
+    revCatData = monthSlice.map((m, i) => ({
+      name: m,
+      GW: D.revByCategory.generalWaste[i],
+      Asb: D.revByCategory.asbestos[i],
+      Soil: D.revByCategory.soil[i],
+      Green: D.revByCategory.greenWaste[i],
+      Other: D.revByCategory.other[i],
+    }));
+    pieMixData = [
+      { name: 'General Waste', value: D.revByCategory.generalWaste.slice(0, monthCount).reduce((a, b) => a + b, 0) },
+      { name: 'Asbestos', value: D.revByCategory.asbestos.slice(0, monthCount).reduce((a, b) => a + b, 0) },
+      { name: 'Soil', value: D.revByCategory.soil.slice(0, monthCount).reduce((a, b) => a + b, 0) },
+      { name: 'Green Waste', value: D.revByCategory.greenWaste.slice(0, monthCount).reduce((a, b) => a + b, 0) },
+      { name: 'Other', value: D.revByCategory.other.slice(0, monthCount).reduce((a, b) => a + b, 0) },
+    ];
+  }
 
   const pieColors = [B.yellow, B.orange, '#8B6914', B.green, B.purple];
 

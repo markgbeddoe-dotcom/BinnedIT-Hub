@@ -3,10 +3,40 @@ import { B, fontHead, fmtFull } from '../../theme';
 import { SectionHeader, ChartCard } from '../UIComponents';
 import * as D from '../../data/financials';
 import { getMonthData } from '../../data/dataStore';
+import { useCompliance } from '../../hooks/useMonthData';
 
-export default function RiskEPATab({ data, selectedMonth, monthCount, monthLabel, wizardData }) {
+export default function RiskEPATab({ reportId, reportMonth, selectedMonth, monthCount, monthLabel, wizardData }) {
   const stored = getMonthData(selectedMonth);
-  const comp = wizardData?.compliance || stored?.compliance || {};
+  const { data: liveCompliance } = useCompliance(reportMonth);
+
+  // Prefer Supabase compliance data, then wizard data, then localStorage, then empty
+  let comp;
+  if (liveCompliance) {
+    // Map Supabase columns back to the shape the UI expects
+    comp = {
+      whsIncidents: liveCompliance.whs_incidents > 0 ? 'yes' : 'no',
+      whsDetails: liveCompliance.whs_incident_details || '',
+      nearMiss: liveCompliance.whs_near_miss ? 'yes' : 'no',
+      nearMissDetails: liveCompliance.whs_near_miss_details || '',
+      whsRegister: liveCompliance.whs_register_current ? 'yes' : 'no',
+      lastToolbox: liveCompliance.whs_last_toolbox_talk || '',
+      trainingRows: [],
+      trainingRegister: liveCompliance.whs_training_current ? 'yes' : 'not_started',
+      asbJobs: liveCompliance.asbestos_jobs || '',
+      asbDocs: liveCompliance.asbestos_docs_complete ? 'yes' : 'not_tracked',
+      asbClearance: liveCompliance.asbestos_clearance_certs > 0 ? 'yes' : 'na',
+      asbComplaints: liveCompliance.asbestos_complaints > 0 ? 'yes' : 'no',
+      asbComplaintDetails: liveCompliance.asbestos_complaint_details || '',
+      vehiclesOffRoad: liveCompliance.vehicles_off_road > 0 ? 'yes' : 'no',
+      vehiclesOffRoadReason: liveCompliance.vehicles_off_road_reason || '',
+      fleetInspections: liveCompliance.fleet_inspections_current ? 'yes' : 'no',
+      epaStatus: liveCompliance.epa_renewal_status || (liveCompliance.epa_license_current ? 'current' : 'expired'),
+      epaRenewal: liveCompliance.epa_expiry_date || '',
+      insurance: '',
+    };
+  } else {
+    comp = wizardData?.compliance || stored?.compliance || {};
+  }
   const qual = wizardData?.quality || stored?.quality || {};
 
   return (
@@ -86,7 +116,7 @@ export default function RiskEPATab({ data, selectedMonth, monthCount, monthLabel
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${B.cardBorder}22` }}>
               <span style={{ fontSize: 12, color: B.textSecondary }}>EPA Licence</span>
               <span style={{ fontSize: 12, fontWeight: 600, color: comp.epaStatus === 'current' ? B.green : comp.epaStatus === 'expired' ? B.red : B.amber }}>
-                {comp.epaStatus === 'current' ? 'Current' : comp.epaStatus === 'expired' ? 'EXPIRED' : comp.epaStatus === 'renewal_due' ? 'Renewal due' : 'Not recorded'}
+                {comp.epaStatus === 'current' ? 'Current' : comp.epaStatus === 'expired' ? 'EXPIRED' : comp.epaStatus === 'renewal_due' || comp.epaStatus === 'renewal_pending' ? 'Renewal due' : 'Not recorded'}
               </span>
             </div>
             {comp.epaRenewal && (

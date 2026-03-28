@@ -3,24 +3,42 @@ import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveCo
 import { B, fmtFull } from '../../theme';
 import { KPITile, SectionHeader, ChartCard, CustomTooltip } from '../UIComponents';
 import * as D from '../../data/financials';
+import { useAcquisitions } from '../../hooks/useMonthData';
 
-export default function BDMTab({ data, selectedMonth, monthCount, monthLabel }) {
+export default function BDMTab({ reportId, reportMonth, selectedMonth, monthCount, monthLabel }) {
+  const { data: acquisitionRows, isLoading } = useAcquisitions(reportMonth);
+
+  // Use Supabase data if available, else fallback to D.*
+  const useSupabase = acquisitionRows && acquisitionRows.length > 0;
+  const newCustomers = useSupabase
+    ? acquisitionRows.map(r => ({
+        name: r.customer_name,
+        firstJob: r.first_job_date || '',
+        jobs: r.jobs_in_month || 0,
+        revenue: r.revenue_in_month || 0,
+        type: r.customer_type || 'Commercial',
+      }))
+    : D.newCustomersFeb;
+
   return (
     <div>
       <SectionHeader title="Business Development" subtitle="New customers, dormant accounts, pipeline" />
+      {isLoading && (
+        <div style={{ padding: '8px 0', fontSize: 12, color: B.textMuted, marginBottom: 8 }}>Loading acquisition data...</div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
-        <KPITile label={`New Customers (${monthLabel})`} value={D.newCustomersFeb.length} status="green" />
+        <KPITile label={`New Customers (${monthLabel})`} value={newCustomers.length} status="green" />
         <KPITile label="Dormant (90+ days)" value={D.dormantCustomers.length} status="red" />
-        <KPITile label="Net Movement" value={`${D.newCustomersFeb.length - D.dormantCustomers.length}`} status="red" />
+        <KPITile label="Net Movement" value={`${newCustomers.length - D.dormantCustomers.length}`} status="red" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <ChartCard title={`New Customers — ${monthLabel} (${D.newCustomersFeb.length})`}>
+        <ChartCard title={`New Customers — ${monthLabel} (${newCustomers.length})`}>
           <div style={{ overflowX: 'auto' }}>
             <div style={{ minWidth: 320 }}>
-              <ResponsiveContainer width="100%" height={Math.max(180, D.newCustomersFeb.length * 40)}>
+              <ResponsiveContainer width="100%" height={Math.max(180, newCustomers.length * 40)}>
                 <BarChart
-                  data={[...D.newCustomersFeb].sort((a, b) => b.revenue - a.revenue)}
+                  data={[...newCustomers].sort((a, b) => b.revenue - a.revenue)}
                   layout="vertical"
                   margin={{ left: 10, right: 20, top: 5, bottom: 5 }}
                 >
@@ -29,7 +47,7 @@ export default function BDMTab({ data, selectedMonth, monthCount, monthLabel }) 
                   <YAxis type="category" dataKey="name" tick={{ fill: B.textSecondary, fontSize: 10 }} width={120} />
                   <Tooltip content={<CustomTooltip formatter={v => fmtFull(v)} />} />
                   <Bar dataKey="revenue" fill={B.green} name="Revenue" radius={[0, 4, 4, 0]} barSize={20}>
-                    {D.newCustomersFeb.map((c, i) => (
+                    {newCustomers.map((c, i) => (
                       <Cell key={i} fill={c.type === 'Commercial' ? B.green : c.type === 'Builder' ? B.blue : c.type === 'Industrial' ? B.cyan : B.amber} />
                     ))}
                   </Bar>

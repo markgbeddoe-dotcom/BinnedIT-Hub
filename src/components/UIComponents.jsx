@@ -47,6 +47,18 @@ export const LoadingSkeleton = ({ height = 200, message = 'Loading data…' }) =
   </div>
 )
 
+export const LoadingState = ({ message = 'Loading...' }) => (
+  <div style={{ padding: 40, textAlign: 'center', color: B.textMuted, fontSize: 13 }}>
+    {message}
+  </div>
+)
+
+export const ErrorState = ({ message }) => (
+  <div style={{ padding: 20, background: `${B.red}15`, border: `1px solid ${B.red}40`, borderRadius: 8, color: B.red, fontSize: 13 }}>
+    {message || 'Failed to load data. Showing cached data.'}
+  </div>
+)
+
 export const CustomTooltip = ({active,payload,label,formatter}) => {
   if (!active||!payload||!payload.length) return null;
   return (

@@ -4,20 +4,64 @@ import { B, fmtFull } from '../../theme';
 import { KPITile, SectionHeader, ChartCard, CustomTooltip } from '../UIComponents';
 import * as D from '../../data/financials';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { useDebtors } from '../../hooks/useMonthData';
 
-export default function DebtorsTab({ data, selectedMonth, monthCount, monthLabel }) {
+export default function DebtorsTab({ reportId, reportMonth, selectedMonth, monthCount, monthLabel }) {
   const { isMobile } = useBreakpoint();
-  const arChartData = Object.entries(D.arData).map(([k, v]) => ({ name: k, value: v }));
+  const { data: debtorRows, isLoading } = useDebtors(reportMonth);
+
+  // Build AR data from Supabase or fallback to D.*
+  let arChartData, topDebtorsData, arTotal, arOverdue, arCurrent, arOlder;
+  if (debtorRows && debtorRows.length > 0) {
+    // Aggregate from Supabase debtor rows
+    arCurrent = debtorRows.reduce((a, r) => a + (r.current_amount || 0), 0);
+    const ar30 = debtorRows.reduce((a, r) => a + (r.overdue_30 || 0), 0);
+    const ar60 = debtorRows.reduce((a, r) => a + (r.overdue_60 || 0), 0);
+    const ar90 = debtorRows.reduce((a, r) => a + (r.overdue_90plus || 0), 0);
+    const arOlderBucket = debtorRows.reduce((a, r) => a + (r.older_bucket || 0), 0);
+    arTotal = debtorRows.reduce((a, r) => a + (r.total_outstanding || 0), 0);
+    arOverdue = ar30 + ar60 + ar90 + arOlderBucket;
+    arOlder = arOlderBucket;
+    arChartData = [
+      { name: 'Current', value: arCurrent },
+      { name: '< 1 Month', value: ar30 },
+      { name: '1 Month', value: ar60 },
+      { name: '2 Months', value: ar90 },
+      { name: 'Older', value: arOlderBucket },
+    ];
+    topDebtorsData = debtorRows.slice(0, 10).map(r => ({
+      name: r.debtor_name,
+      total: r.total_outstanding || 0,
+      current: r.current_amount || 0,
+      under1m: r.overdue_30 || 0,
+      m1: r.overdue_60 || 0,
+      m2: r.overdue_90plus || 0,
+      m3: 0,
+      older: r.older_bucket || 0,
+    }));
+  } else {
+    // Fallback to D.*
+    arChartData = Object.entries(D.arData).map(([k, v]) => ({ name: k, value: v }));
+    topDebtorsData = D.topDebtors;
+    arTotal = D.arTotal;
+    arOverdue = D.arOverdue;
+    arCurrent = D.arData.Current;
+    arOlder = D.arData.Older;
+  }
+
   const arColors = [B.green, B.yellow, B.amber, B.orange, B.red, '#991B1B'];
 
   return (
     <div>
       <SectionHeader title="Debtors & AR Aging" subtitle={`Who owes money and how overdue — as at ${monthLabel}`} />
+      {isLoading && (
+        <div style={{ padding: '8px 0', fontSize: 12, color: B.textMuted, marginBottom: 8 }}>Loading debtor data...</div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
-        <KPITile label="Total AR" value={fmtFull(D.arTotal)} status="yellow" />
-        <KPITile label="Current" value={fmtFull(D.arData.Current)} sub={`${(D.arData.Current / D.arTotal * 100).toFixed(0)}%`} status="green" />
-        <KPITile label="Overdue" value={fmtFull(D.arOverdue)} sub={`${(D.arOverdue / D.arTotal * 100).toFixed(0)}%`} status="red" />
-        <KPITile label="Older (90+ days)" value={fmtFull(D.arData.Older)} status="red" />
+        <KPITile label="Total AR" value={fmtFull(arTotal)} status="yellow" />
+        <KPITile label="Current" value={fmtFull(arCurrent)} sub={arTotal > 0 ? `${(arCurrent / arTotal * 100).toFixed(0)}%` : ''} status="green" />
+        <KPITile label="Overdue" value={fmtFull(arOverdue)} sub={arTotal > 0 ? `${(arOverdue / arTotal * 100).toFixed(0)}%` : ''} status="red" />
+        <KPITile label="Older (90+ days)" value={fmtFull(arOlder)} status="red" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -47,8 +91,8 @@ export default function DebtorsTab({ data, selectedMonth, monthCount, monthLabel
         <ChartCard title="Top 10 Debtors (by aging)">
           <div style={{ overflowX: 'auto' }}>
             <div style={{ minWidth: 320 }}>
-              <ResponsiveContainer width="100%" height={Math.max(250, D.topDebtors.length * 35)}>
-                <BarChart data={D.topDebtors} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+              <ResponsiveContainer width="100%" height={Math.max(250, topDebtorsData.length * 35)}>
+                <BarChart data={topDebtorsData} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E0E0E0" horizontal={false} />
                   <XAxis type="number" tick={{ fill: B.textMuted, fontSize: 10 }} tickFormatter={v => '$' + Math.round(v / 1000) + 'k'} />
                   <YAxis type="category" dataKey="name" tick={{ fill: B.textSecondary, fontSize: 9 }} width={110} />

@@ -32,6 +32,8 @@ import InvestorView from './components/InvestorView';
 // React Query hooks
 import { useAvailableMonths } from './hooks/useMonthData';
 import { useBreakpoint } from './hooks/useBreakpoint';
+import { createReport, upsertFinancials, upsertCompliance } from './api/reports';
+import { queryClient } from './hooks/queryClient';
 
 const VERSION = '2.2.0';
 const BUILD_DATE = '27 March 2026';
@@ -86,7 +88,7 @@ export default function App() {
         const d = new Date(r.report_month);
         const label = d.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
         const key = r.report_month.slice(0, 7);
-        return { key, label };
+        return { key, label, id: r.id, reportMonth: r.report_month };
       }).reverse();
     }
     return FALLBACK_MONTHS;
@@ -95,6 +97,11 @@ export default function App() {
   const mi = availableMonths.findIndex(m => m.key === selectedMonth);
   const monthCount = mi >= 0 ? mi + 1 : FALLBACK_MONTHS.findIndex(m => m.key === selectedMonth) + 1 || 8;
   const selLabel = availableMonths.find(m => m.key === selectedMonth)?.label || FALLBACK_MONTHS.find(m => m.key === selectedMonth)?.label || 'Feb 2026';
+
+  // Derive reportId and reportMonth for the selected month (from Supabase data)
+  const selectedMonthRecord = availableMonths.find(m => m.key === selectedMonth);
+  const reportId = selectedMonthRecord?.id ?? null;
+  const reportMonth = selectedMonthRecord?.reportMonth ?? (selectedMonth ? `${selectedMonth}-01` : null);
 
   const alerts = useMemo(() => generateAlerts(monthCount), [monthCount]);
 
@@ -110,7 +117,7 @@ export default function App() {
 
   const goHome = () => { navigate('/home'); setMenuOpen(false); };
 
-  const handleWizardComplete = (data) => {
+  const handleWizardComplete = async (data) => {
     const monthKey = data.selectedMonth || selectedMonth;
     const monthRecord = {
       monthKey, status: 'complete', createdAt: new Date().toISOString(),
@@ -118,11 +125,84 @@ export default function App() {
       files: data.files || {}, bankBalance: data.bankBalance,
       quality: data.quality || {}, compliance: data.compliance || {}, market: data.market || {},
     };
+    // Keep localStorage save as backup
     saveMonthData(monthKey, monthRecord);
     setWizardData(data);
     setSelectedMonth(monthKey);
     navigate('/dashboard');
     setDashTab('snapshot');
+
+    // Write to Supabase in the background (non-blocking)
+    try {
+      const wMonth = monthKey ? `${monthKey}-01` : null;
+      if (!wMonth) return;
+
+      // 1. Create or get the monthly report record
+      const report = await createReport(wMonth);
+      if (!report || !report.id) return;
+
+      // 2. Upsert financials — map wizard parsed data to Supabase columns
+      const p = data.parsed || {};
+      // parsed[1] = P&L accrual, parsed[2] = cash summary
+      const pl = p[1] || {};
+      const cash = p[2] || {};
+      await upsertFinancials(report.id, wMonth, {
+        rev_general: pl.revGeneral || 0,
+        rev_asbestos: pl.revAsbestos || 0,
+        rev_soil: pl.revSoil || 0,
+        rev_green: pl.revGreen || 0,
+        rev_other: pl.revOther || 0,
+        rev_total: pl.totalRevenue || pl.revTotal || 0,
+        revenue_total: pl.totalRevenue || pl.revTotal || 0,
+        cos_fuel: pl.fuelCosts || pl.cosFuel || 0,
+        cos_wages: pl.wages || pl.cosWages || 0,
+        cos_tolls: pl.tolls || pl.cosTolls || 0,
+        cos_repairs: pl.repairs || pl.cosRepairs || 0,
+        cos_total: pl.totalCOS || pl.cosTotal || 0,
+        gross_profit: pl.grossProfit || 0,
+        gross_margin_pct: pl.gmPct || pl.grossMarginPct || 0,
+        opex_rent: pl.rent || pl.opexRent || 0,
+        opex_advertising: pl.advertising || pl.opexAdvertising || 0,
+        opex_total: pl.totalOpex || pl.opexTotal || 0,
+        net_profit: pl.netProfit || 0,
+        net_margin_pct: pl.npPct || pl.netMarginPct || 0,
+        cash_income: cash.totalIncome || 0,
+        cash_expenses: cash.totalExpenses || 0,
+        cash_net_movement: (cash.totalIncome || 0) - (cash.totalExpenses || 0),
+      });
+
+      // 3. Upsert compliance if wizard collected it
+      const comp = data.compliance || {};
+      if (Object.keys(comp).length > 0) {
+        await upsertCompliance(report.id, wMonth, {
+          whs_incidents: comp.whsIncidents === 'yes' ? 1 : 0,
+          whs_incident_details: comp.whsDetails || null,
+          whs_register_current: comp.whsRegister === 'yes',
+          whs_near_miss: comp.nearMiss === 'yes',
+          whs_near_miss_details: comp.nearMissDetails || null,
+          whs_last_toolbox_talk: comp.lastToolbox || null,
+          asbestos_jobs: parseInt(comp.asbJobs) || 0,
+          asbestos_docs_complete: comp.asbDocs === 'yes',
+          asbestos_clearance_certs: comp.asbClearance === 'yes' ? 1 : 0,
+          asbestos_complaints: comp.asbComplaints === 'yes' ? 1 : 0,
+          asbestos_complaint_details: comp.asbComplaintDetails || null,
+          epa_license_current: comp.epaStatus === 'current',
+          epa_renewal_status: comp.epaStatus || 'current',
+          epa_expiry_date: comp.epaRenewal || null,
+          vehicle_inspections_current: comp.fleetInspections === 'yes',
+          vehicles_off_road: comp.vehiclesOffRoad === 'yes' ? 1 : 0,
+          vehicles_off_road_reason: comp.vehiclesOffRoadReason || null,
+          fleet_inspections_current: comp.fleetInspections === 'yes',
+        });
+      }
+
+      // 4. Invalidate queries so dashboard refreshes
+      queryClient.invalidateQueries({ queryKey: ['available-months'] });
+      queryClient.invalidateQueries({ queryKey: ['financials', wMonth] });
+    } catch (err) {
+      // Supabase write failed — that's OK, localStorage backup was already saved
+      console.warn('Supabase write failed (non-fatal):', err.message);
+    }
   };
 
   const toggleDone = (id) => {
@@ -198,7 +278,7 @@ export default function App() {
   // ===== DASHBOARD =====
   const Dashboard = () => {
     const tabAlerts = alerts[dashTab === 'benchmarking' ? 'pricing' : dashTab] || [];
-    const tabProps = { selectedMonth, monthCount, monthLabel: selLabel };
+    const tabProps = { selectedMonth, monthCount, monthLabel: selLabel, reportId, reportMonth };
 
     return (
       <div style={{maxWidth:1100,margin:'0 auto',padding:'20px 24px'}}>

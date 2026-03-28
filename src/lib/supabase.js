@@ -7,7 +7,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase env vars not set — app will not connect to database')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// Use placeholder values when env vars are missing to prevent createClient from throwing
+// The app will still render using fallback hardcoded data (D.* from financials.js)
+const resolvedUrl = supabaseUrl || 'https://placeholder.supabase.co'
+const resolvedKey = supabaseAnonKey || 'placeholder-anon-key'
+
+export const supabase = createClient(resolvedUrl, resolvedKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,

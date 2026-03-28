@@ -4,19 +4,47 @@ import { B, fmt, fmtFull } from '../../theme';
 import { KPITile, SectionHeader, ChartCard, CustomTooltip } from '../UIComponents';
 import * as D from '../../data/financials';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { useFinancials, useYTDFinancials } from '../../hooks/useMonthData';
 
-export default function CashFlowTab({ data, selectedMonth, monthCount, monthLabel }) {
+export default function CashFlowTab({ reportId, reportMonth, selectedMonth, monthCount, monthLabel }) {
   const { isMobile } = useBreakpoint();
   const monthSlice = D.months.slice(0, monthCount);
-  const sum = arr => arr.reduce((a, b) => a + b, 0);
 
-  const cashData = monthSlice.map((m, i) => ({
-    name: m,
-    Income: D.cashIncome[i],
-    Expenses: D.cashExpenses[i],
-    Net: D.cashNetMovement[i],
-    Balance: D.cashBalance[i],
-  }));
+  const { data: financials } = useFinancials(reportMonth);
+  const { data: ytdRows } = useYTDFinancials(reportMonth);
+
+  // Build cash chart data — prefer Supabase YTD rows
+  let cashData;
+  if (ytdRows && ytdRows.length > 0) {
+    let runningBalance = 0;
+    cashData = ytdRows.map(r => {
+      const d = new Date(r.report_month);
+      const name = d.toLocaleDateString('en-AU', { month: 'short' });
+      const net = r.cash_net_movement || ((r.cash_income || 0) - (r.cash_expenses || 0));
+      runningBalance += net;
+      return {
+        name,
+        Income: r.cash_income || 0,
+        Expenses: r.cash_expenses || 0,
+        Net: net,
+        Balance: runningBalance,
+      };
+    });
+  } else {
+    cashData = monthSlice.map((m, i) => ({
+      name: m,
+      Income: D.cashIncome[i],
+      Expenses: D.cashExpenses[i],
+      Net: D.cashNetMovement[i],
+      Balance: D.cashBalance[i],
+    }));
+  }
+
+  // KPI values — prefer live data
+  const curCashBalance = financials?.cash_balance ?? (D.cashBalance[monthCount - 1] !== undefined ? D.cashBalance[monthCount - 1] : 99334);
+  const ytdCashNet = ytdRows && ytdRows.length > 0
+    ? ytdRows.reduce((a, r) => a + (r.cash_net_movement || ((r.cash_income || 0) - (r.cash_expenses || 0))), 0)
+    : D.cashNetMovement.slice(0, monthCount).reduce((a, b) => a + b, 0);
 
   const projectionColors = [B.green, B.green, B.green, B.green, B.amber, B.amber];
 
@@ -24,8 +52,8 @@ export default function CashFlowTab({ data, selectedMonth, monthCount, monthLabe
     <div>
       <SectionHeader title="Cash Flow & Projections" subtitle={`Cash basis performance — YTD to ${monthLabel}`} />
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
-        <KPITile label="True Cash (Westpac)" value="$99,334" status="green" large />
-        <KPITile label="YTD Cash Net" value={fmtFull(D.cashNetMovement.slice(0, monthCount).reduce((a, b) => a + b, 0))} status="green" />
+        <KPITile label="True Cash (Westpac)" value={fmtFull(curCashBalance)} status="green" large />
+        <KPITile label="YTD Cash Net" value={fmtFull(ytdCashNet)} status="green" />
         <KPITile label="Monthly Loan Payments" value={fmtFull(D.monthlyLoanRepayments)} status="amber" />
         <KPITile label="Annual Debt Service" value={fmtFull(D.annualDebtService)} status="amber" />
       </div>
