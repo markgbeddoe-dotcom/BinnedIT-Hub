@@ -64,7 +64,7 @@ export default function DebtorsTab({ reportId, reportMonth, selectedMonth, month
         <KPITile label="Older (90+ days)" value={fmtFull(arOlder)} status="red" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
         <ChartCard title="AR Aging Breakdown">
           <div style={{ overflowX: 'auto' }}>
             <div style={{ minWidth: 300 }}>

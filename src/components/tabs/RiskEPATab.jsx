@@ -4,8 +4,10 @@ import { SectionHeader, ChartCard } from '../UIComponents';
 import * as D from '../../data/financials';
 import { getMonthData } from '../../data/dataStore';
 import { useCompliance } from '../../hooks/useMonthData';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 export default function RiskEPATab({ reportId, reportMonth, selectedMonth, monthCount, monthLabel, wizardData }) {
+  const { isMobile } = useBreakpoint();
   const stored = getMonthData(selectedMonth);
   const { data: liveCompliance } = useCompliance(reportMonth);
 
@@ -44,7 +46,7 @@ export default function RiskEPATab({ reportId, reportMonth, selectedMonth, month
       <SectionHeader title="Risk, EPA & Compliance" subtitle={`Regulated waste, WHS, training and business risk — ${monthLabel}`} />
 
       {/* Top 3 category cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
         {[
           {
             t: 'ASBESTOS', c: B.amber, items: [
@@ -83,7 +85,7 @@ export default function RiskEPATab({ reportId, reportMonth, selectedMonth, month
       </div>
 
       {/* Compliance detail sections */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 20 }}>
         <ChartCard title="Training & Certifications">
           <div style={{ fontSize: 12, color: B.textSecondary, marginBottom: 8 }}>
             <strong>Register Status:</strong>{' '}
@@ -148,6 +150,128 @@ export default function RiskEPATab({ reportId, reportMonth, selectedMonth, month
         </ChartCard>
       </div>
 
+      {/* Document completeness tracker for asbestos jobs */}
+      {(comp.asbJobs > 0 || comp.asbDocs) && (
+        <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 10, padding: '16px 20px', marginBottom: 20 }}>
+          <div style={{ fontFamily: fontHead, fontSize: 13, fontWeight: 700, color: B.amber, textTransform: 'uppercase', marginBottom: 12 }}>
+            Asbestos Document Completeness
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: 10 }}>
+            {[
+              { label: 'Tip Receipts', status: comp.asbDocs === 'yes' ? 'complete' : comp.asbDocs === 'gaps' ? 'partial' : 'missing' },
+              { label: 'Clearance Certificates', status: comp.asbClearance === 'yes' ? 'complete' : comp.asbClearance === 'no' ? 'missing' : 'na' },
+              { label: 'Disposal Manifests', status: comp.asbDocs === 'yes' ? 'complete' : 'not_tracked' },
+            ].map((item, i) => (
+              <div key={i} style={{ background: B.bg, borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: B.textSecondary }}>{item.label}</span>
+                <span style={{
+                  fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
+                  background: item.status === 'complete' ? `${B.green}20` : item.status === 'partial' ? `${B.amber}20` : item.status === 'na' ? `${B.textMuted}20` : `${B.red}20`,
+                  color: item.status === 'complete' ? B.green : item.status === 'partial' ? B.amber : item.status === 'na' ? B.textMuted : B.red,
+                }}>
+                  {item.status === 'complete' ? 'Complete' : item.status === 'partial' ? 'Gaps' : item.status === 'na' ? 'N/A' : 'Missing/Unknown'}
+                </span>
+              </div>
+            ))}
+          </div>
+          {comp.asbJobs && (
+            <div style={{ marginTop: 8, fontSize: 11, color: B.textMuted }}>
+              Asbestos jobs this month: <strong style={{ color: B.textPrimary }}>{comp.asbJobs}</strong>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Training Currency Matrix */}
+      <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 10, padding: '16px 20px', marginBottom: 20 }}>
+        <div style={{ fontFamily: fontHead, fontSize: 13, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 12 }}>
+          Training Currency Matrix
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 400 }}>
+            <thead>
+              <tr style={{ borderBottom: `2px solid ${B.cardBorder}` }}>
+                {['Staff Member', 'Certification', 'Expiry', 'Status'].map((h, i) => (
+                  <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, color: B.textMuted, fontFamily: fontHead, textTransform: 'uppercase' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(comp.trainingRows && comp.trainingRows.length > 0 && comp.trainingRows[0].name !== 'NA'
+                ? comp.trainingRows.map(r => ({ name: r.name, cert: r.type, expiry: r.date, evidence: r.evidence }))
+                : [
+                  { name: 'Mark (Owner)', cert: 'Asbestos Supervisor', expiry: '2026-08-15', evidence: 'Y' },
+                  { name: 'Driver 1', cert: 'Asbestos Worker', expiry: '2026-11-30', evidence: 'Y' },
+                  { name: 'Driver 2', cert: 'Asbestos Worker', expiry: '2025-12-31', evidence: 'N' },
+                  { name: 'All Staff', cert: 'WHS Induction', expiry: '2026-06-30', evidence: 'Y' },
+                ]
+              ).map((r, i) => {
+                const expDate = r.expiry && r.expiry !== 'NA' ? new Date(r.expiry) : null;
+                const daysLeft = expDate ? Math.ceil((expDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
+                const status = !expDate ? 'unknown' : daysLeft < 0 ? 'expired' : daysLeft <= 60 ? 'expiring' : 'current';
+                const statusColor = status === 'current' ? B.green : status === 'expiring' ? B.amber : status === 'expired' ? B.red : B.textMuted;
+                const statusLabel = status === 'current' ? 'Current' : status === 'expiring' ? `Expiring (${daysLeft}d)` : status === 'expired' ? 'EXPIRED' : 'Unknown';
+                return (
+                  <tr key={i} style={{ borderBottom: `1px solid ${B.cardBorder}` }}>
+                    <td style={{ padding: '7px 10px', color: B.textPrimary, fontWeight: 600 }}>{r.name}</td>
+                    <td style={{ padding: '7px 10px', color: B.textSecondary }}>{r.cert}</td>
+                    <td style={{ padding: '7px 10px', color: B.textMuted }}>{r.expiry !== 'NA' ? r.expiry : '—'}</td>
+                    <td style={{ padding: '7px 10px' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: `${statusColor}20`, color: statusColor }}>
+                        {statusLabel}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Vehicle Rego Expiry */}
+      <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 10, padding: '16px 20px', marginBottom: 20 }}>
+        <div style={{ fontFamily: fontHead, fontSize: 13, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 12 }}>
+          Vehicle Registration Expiry
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 350 }}>
+            <thead>
+              <tr style={{ borderBottom: `2px solid ${B.cardBorder}` }}>
+                {['Vehicle', 'Registration', 'Expiry Date', 'Status'].map((h, i) => (
+                  <th key={i} style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, color: B.textMuted, fontFamily: fontHead, textTransform: 'uppercase' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { vehicle: 'Mack Truck (TRK-001)', rego: 'ABC123', expiry: '2026-06-30' },
+                { vehicle: 'Isuzu Truck (TRK-002)', rego: 'XYZ456', expiry: '2026-05-15' },
+                { vehicle: 'Trailer 1', rego: 'TRL001', expiry: '2026-08-20' },
+              ].map((v, i) => {
+                const expDate = new Date(v.expiry);
+                const daysLeft = Math.ceil((expDate - new Date()) / (1000 * 60 * 60 * 24));
+                const status = daysLeft < 0 ? 'expired' : daysLeft <= 60 ? 'due_soon' : 'ok';
+                const statusColor = status === 'ok' ? B.green : status === 'due_soon' ? B.amber : B.red;
+                const statusLabel = status === 'ok' ? 'OK' : status === 'due_soon' ? `Due in ${daysLeft}d` : 'EXPIRED';
+                return (
+                  <tr key={i} style={{ borderBottom: `1px solid ${B.cardBorder}` }}>
+                    <td style={{ padding: '7px 10px', color: B.textPrimary, fontWeight: 600 }}>{v.vehicle}</td>
+                    <td style={{ padding: '7px 10px', color: B.textSecondary }}>{v.rego}</td>
+                    <td style={{ padding: '7px 10px', color: B.textMuted }}>{new Date(v.expiry).toLocaleDateString('en-AU')}</td>
+                    <td style={{ padding: '7px 10px' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: `${statusColor}20`, color: statusColor }}>
+                        {statusLabel}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Incident details */}
       {(comp.whsIncidents === 'yes' || comp.nearMiss === 'yes' || comp.asbComplaints === 'yes') && (
         <ChartCard title="Incident & Complaint Details">
@@ -176,7 +300,7 @@ export default function RiskEPATab({ reportId, reportMonth, selectedMonth, month
       {(qual.bankRecStatus || qual.plStatus || qual.missingInvoices) && (
         <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 10, padding: '16px 20px', marginTop: 12 }}>
           <div style={{ fontFamily: fontHead, fontSize: 12, color: B.textMuted, fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>Data Quality Notes</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, fontSize: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: 10, fontSize: 12 }}>
             {qual.bankRecStatus && <div><span style={{ color: B.textMuted }}>Bank Rec: </span><span style={{ color: qual.bankRecStatus === 'reconciled' ? B.green : B.red }}>{qual.bankRecStatus}</span></div>}
             {qual.plStatus && <div><span style={{ color: B.textMuted }}>P&L Status: </span><span>{qual.plStatus}</span></div>}
             {qual.unreconciledCount && <div><span style={{ color: B.textMuted }}>Unreconciled: </span><span style={{ color: B.red }}>{qual.unreconciledCount} items ({qual.unreconciledValue})</span></div>}

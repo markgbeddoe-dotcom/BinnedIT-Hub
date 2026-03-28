@@ -82,7 +82,7 @@ export default function MarginsTab({ reportId, reportMonth, selectedMonth, month
         <KPITile label={`${monthLabel} Fuel`} value={fmtFull(curFuel)} sub={mi === 7 ? '! Appears unposted' : ''} status={mi === 7 ? 'red' : 'yellow'} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 20 }}>
         <ChartCard title="Monthly COS vs Operating Expenses">
           <div style={{ overflowX: 'auto' }}>
             <div style={{ minWidth: 320 }}>

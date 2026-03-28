@@ -4,8 +4,10 @@ import { B, fmt, fmtFull } from '../../theme';
 import { SectionHeader, ChartCard, CustomTooltip } from '../UIComponents';
 import * as D from '../../data/financials';
 import { useYTDFinancials } from '../../hooks/useMonthData';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 export default function RevenueTab({ reportId, reportMonth, selectedMonth, monthCount, monthLabel }) {
+  const { isMobile } = useBreakpoint();
   const monthSlice = D.months.slice(0, monthCount);
 
   const { data: ytdRows } = useYTDFinancials(reportMonth);
@@ -55,11 +57,11 @@ export default function RevenueTab({ reportId, reportMonth, selectedMonth, month
   return (
     <div>
       <SectionHeader title="Revenue Analysis" subtitle={`Revenue by category and trend — YTD to ${monthLabel}`} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 20 }}>
         <ChartCard title="Revenue by Category (Monthly)">
           <div style={{ overflowX: 'auto' }}>
-            <div style={{ minWidth: 320 }}>
-              <ResponsiveContainer width="100%" height={280}>
+            <div style={{ minWidth: 300 }}>
+              <ResponsiveContainer width="100%" height={isMobile ? 200 : 280}>
                 <BarChart data={revCatData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" />
                   <XAxis dataKey="name" tick={{ fill: B.textMuted, fontSize: 11 }} />
@@ -79,8 +81,8 @@ export default function RevenueTab({ reportId, reportMonth, selectedMonth, month
 
         <ChartCard title="Revenue Mix YTD">
           <div style={{ overflowX: 'auto' }}>
-            <div style={{ minWidth: 320 }}>
-              <ResponsiveContainer width="100%" height={280}>
+            <div style={{ minWidth: 280 }}>
+              <ResponsiveContainer width="100%" height={isMobile ? 200 : 280}>
                 <PieChart>
                   <Pie
                     data={pieMixData}

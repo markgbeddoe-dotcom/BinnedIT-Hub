@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ComposedChart, Bar, Line, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { B, fontHead, fmt, fmtFull } from '../../theme';
 import { KPITile, SectionHeader, ChartCard, CustomTooltip } from '../UIComponents';
@@ -6,10 +6,25 @@ import * as D from '../../data/financials';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useFinancials, useBalanceSheet, useYTDFinancials } from '../../hooks/useMonthData';
 
+const FALLBACK_MONTHS = [
+  {key:'2025-07',label:'Jul 2025'},{key:'2025-08',label:'Aug 2025'},{key:'2025-09',label:'Sep 2025'},
+  {key:'2025-10',label:'Oct 2025'},{key:'2025-11',label:'Nov 2025'},{key:'2025-12',label:'Dec 2025'},
+  {key:'2026-01',label:'Jan 2026'},{key:'2026-02',label:'Feb 2026'},
+];
+
 export default function SnapshotTab({ reportId, reportMonth, selectedMonth, monthCount, monthLabel }) {
   const { isMobile } = useBreakpoint();
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareMonth, setCompareMonth] = useState('2026-01');
+
   const mi = monthCount - 1;
   const monthSlice = D.months.slice(0, monthCount);
+
+  // Compare month data
+  const compareReportMonth = compareMonth ? `${compareMonth}-01` : null;
+  const { data: compareFinancials } = useFinancials(compareMode ? compareReportMonth : null);
+  const compareMi = FALLBACK_MONTHS.findIndex(m => m.key === compareMonth);
+  const compareMLabel = FALLBACK_MONTHS.find(m => m.key === compareMonth)?.label || compareMonth;
 
   // Live Supabase data
   const { data: financials, isLoading: finLoading } = useFinancials(reportMonth);
@@ -82,6 +97,12 @@ export default function SnapshotTab({ reportId, reportMonth, selectedMonth, mont
   const bsFixedAssets = balance?.fixed_assets ?? D.balanceSheet.fixedAssets.total;
   const bsCurrentYearEarnings = balance?.current_year_earnings ?? D.balanceSheet.equity.currentYearEarnings;
 
+  // Compare month fallback values
+  const cRev = compareFinancials?.rev_total || compareFinancials?.revenue_total || (compareMi >= 0 ? D.totalRevenue[compareMi] : 0);
+  const cNP = compareFinancials?.net_profit || (compareMi >= 0 ? D.netProfit[compareMi] : 0);
+  const cGP = compareFinancials?.gross_profit || (compareMi >= 0 ? D.grossProfit[compareMi] : 0);
+  const cGMPct = compareFinancials?.gross_margin_pct || (compareMi >= 0 ? D.gmPct[compareMi] : 0);
+
   return (
     <div>
       <SectionHeader
@@ -91,6 +112,76 @@ export default function SnapshotTab({ reportId, reportMonth, selectedMonth, mont
       {finLoading && (
         <div style={{ padding: '8px 0', fontSize: 12, color: B.textMuted, marginBottom: 8 }}>Loading live data...</div>
       )}
+
+      {/* Compare toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <button
+          onClick={() => setCompareMode(prev => !prev)}
+          style={{
+            background: compareMode ? B.yellow : 'none',
+            border: `1px solid ${compareMode ? B.yellow : B.cardBorder}`,
+            color: compareMode ? '#000' : B.textSecondary,
+            borderRadius: 6, padding: '5px 14px', cursor: 'pointer',
+            fontFamily: fontHead, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
+          }}
+        >
+          Compare Months
+        </button>
+        {compareMode && (
+          <select
+            value={compareMonth}
+            onChange={e => setCompareMonth(e.target.value)}
+            style={{ background: B.bg, border: `1px solid ${B.cardBorder}`, borderRadius: 6, padding: '5px 10px', fontSize: 12, color: B.textPrimary, outline: 'none' }}
+          >
+            {FALLBACK_MONTHS.filter(m => m.key !== selectedMonth).map(m => (
+              <option key={m.key} value={m.key}>{m.label}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {/* Month comparison panel */}
+      {compareMode && (
+        <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 10, padding: '16px 20px', marginBottom: 20 }}>
+          <div style={{ fontFamily: fontHead, fontSize: 13, fontWeight: 700, color: B.yellow, textTransform: 'uppercase', marginBottom: 12 }}>
+            Month Comparison: {monthLabel} vs {compareMLabel}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12 }}>
+            {[
+              { label: 'Revenue', aVal: curRev, bVal: cRev },
+              { label: 'Net Profit', aVal: financials?.net_profit ?? D.netProfit[mi] ?? 0, bVal: cNP },
+              { label: 'Gross Profit', aVal: financials?.gross_profit ?? D.grossProfit[mi] ?? 0, bVal: cGP },
+              { label: 'GM %', aVal: financials?.gross_margin_pct ?? D.gmPct[mi] ?? 0, bVal: cGMPct, isPct: true },
+            ].map((item, i) => {
+              const diff = item.aVal - item.bVal;
+              const pctChange = item.bVal !== 0 ? ((item.aVal / item.bVal) - 1) * 100 : 0;
+              return (
+                <div key={i} style={{ background: B.bg, borderRadius: 8, padding: '12px 14px', border: `1px solid ${B.cardBorder}` }}>
+                  <div style={{ fontSize: 10, color: B.textMuted, textTransform: 'uppercase', marginBottom: 6 }}>{item.label}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <div>
+                      <div style={{ fontSize: 9, color: B.yellow, fontFamily: fontHead, textTransform: 'uppercase' }}>{monthLabel}</div>
+                      <div style={{ fontFamily: fontHead, fontSize: 16, fontWeight: 700, color: B.textPrimary }}>
+                        {item.isPct ? `${item.aVal.toFixed(1)}%` : fmtFull(item.aVal)}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 9, color: B.textMuted, fontFamily: fontHead, textTransform: 'uppercase' }}>{compareMLabel}</div>
+                      <div style={{ fontFamily: fontHead, fontSize: 16, fontWeight: 700, color: B.textSecondary }}>
+                        {item.isPct ? `${item.bVal.toFixed(1)}%` : fmtFull(item.bVal)}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: diff >= 0 ? B.green : B.red, fontWeight: 700, textAlign: 'right' }}>
+                    {diff >= 0 ? '↑' : '↓'} {item.isPct ? `${Math.abs(diff).toFixed(1)}pp` : fmtFull(Math.abs(diff))} ({Math.abs(pctChange).toFixed(1)}%)
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
         <KPITile label="YTD Revenue" value={fmtFull(ytdRev)} sub={`${monthCount} months`} status="yellow" large />
         <KPITile label="YTD Net Profit" value={fmtFull(ytdNPTotal)} sub={`${ytdNPPct}% margin`} status={ytdNPTotal > 0 ? 'green' : 'red'} large />
@@ -98,11 +189,11 @@ export default function SnapshotTab({ reportId, reportMonth, selectedMonth, mont
         <KPITile label={`${monthLabel} Revenue`} value={fmtFull(curRev)} trend={curTrend} status="green" large />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 20 }}>
         <ChartCard title="Monthly Revenue vs Net Profit">
           <div style={{ overflowX: 'auto' }}>
             <div style={{ minWidth: 320 }}>
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer width="100%" height={isMobile ? 200 : 250}>
                 <ComposedChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" />
                   <XAxis dataKey="name" tick={{ fill: B.textMuted, fontSize: 11 }} />
@@ -120,7 +211,7 @@ export default function SnapshotTab({ reportId, reportMonth, selectedMonth, mont
         <ChartCard title="Gross Margin % Trend">
           <div style={{ overflowX: 'auto' }}>
             <div style={{ minWidth: 320 }}>
-              <ResponsiveContainer width="100%" height={250}>
+              <ResponsiveContainer width="100%" height={isMobile ? 200 : 250}>
                 <LineChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" />
                   <XAxis dataKey="name" tick={{ fill: B.textMuted, fontSize: 11 }} />
@@ -151,7 +242,7 @@ export default function SnapshotTab({ reportId, reportMonth, selectedMonth, mont
         <KPITile label="ATO Clearing" value={fmtFull(bsAtoClearing)} sub="Credit balance" status="green" />
         <KPITile label="Director Loans" value={fmtFull(bsDirectorLoans)} status="amber" />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(3,1fr)', gap: 12 }}>
         <KPITile label="Total Loans Outstanding" value={fmtFull(bsTotalLoans)} status="red" />
         <KPITile label="Fixed Assets" value={fmtFull(bsFixedAssets)} sub="Trucks, bins, equipment" status="green" />
         <KPITile label="Current Year Earnings" value={fmtFull(bsCurrentYearEarnings)} status={bsCurrentYearEarnings > 0 ? 'green' : 'red'} />

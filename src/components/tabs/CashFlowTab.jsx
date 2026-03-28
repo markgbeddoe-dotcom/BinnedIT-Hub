@@ -58,7 +58,7 @@ export default function CashFlowTab({ reportId, reportMonth, selectedMonth, mont
         <KPITile label="Annual Debt Service" value={fmtFull(D.annualDebtService)} status="amber" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 20 }}>
         <ChartCard title="Cash In vs Cash Out (Monthly)">
           <div style={{ overflowX: 'auto' }}>
             <div style={{ minWidth: 320 }}>

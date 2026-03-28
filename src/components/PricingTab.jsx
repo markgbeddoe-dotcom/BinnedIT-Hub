@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { B, fontHead, fmtFull } from '../theme';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 import { pricingData, binTypesData, totalRevenue, totalCOS, totalOpex, fuelCosts, wages, tolls, repairs, rent, advertising, competitorData } from '../data/financials';
 import { allocateCosts, getJobCostBarSegments } from '../data/costAllocator';
 
@@ -34,6 +35,7 @@ const barColors = {
 };
 
 export default function PricingTab({ monthIndex = 7, monthLabel = 'Feb 2026' }) {
+  const { isMobile } = useBreakpoint();
   const [expanded, setExpanded] = useState(null);
   const [showRecon, setShowRecon] = useState(false);
   const [sortCol, setSortCol] = useState('profit');
@@ -238,7 +240,7 @@ export default function PricingTab({ monthIndex = 7, monthLabel = 'Feb 2026' }) 
       </div>
 
       {/* Feb KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(5,1fr)', gap: 12, marginBottom: 20 }}>
         {[
           { l: 'Revenue', v: fmtFull(curMonthRev) },
           { l: 'Direct Costs', v: fmtFull(curMonthCOS), note: monthIndex >= 7 ? '⚠️ May be incomplete' : '' },
@@ -255,7 +257,8 @@ export default function PricingTab({ monthIndex = 7, monthLabel = 'Feb 2026' }) 
       </div>
 
       {/* Pricing Table — Feb numbers only */}
-      <div style={{ background: B.cardBg, border: '1px solid ' + B.cardBorder, borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
+      <div style={{ background: B.cardBg, border: '1px solid ' + B.cardBorder, borderRadius: 10, overflow: isMobile ? 'auto' : 'hidden', marginBottom: 20, ...(isMobile && { overflowX: 'auto' }) }}>
+      <div style={{ minWidth: isMobile ? 600 : 'auto' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 0.9fr 0.9fr 0.9fr 0.9fr 0.7fr 1fr', padding: '10px 16px', background: B.bg, borderBottom: '2px solid ' + B.cardBorder }}>
           {hdrs.map((h, i) => (
             <div key={i} onClick={() => handleSort(h.key)} style={{ fontSize: 9, fontWeight: 700, color: sortCol === h.key ? B.yellow : B.textPrimary, fontFamily: fontHead, textTransform: 'uppercase', textAlign: h.align, cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', justifyContent: h.align === 'left' ? 'flex-start' : 'flex-end', gap: 3 }}>
@@ -462,7 +465,8 @@ export default function PricingTab({ monthIndex = 7, monthLabel = 'Feb 2026' }) 
           <div></div>
           <div style={{ fontSize: 12, textAlign: 'right', fontWeight: 700 }}>{curMonthJobs}</div>
         </div>
-      </div>
+      </div>{/* close minWidth div */}
+      </div>{/* close table container */}
 
       {/* AI Pricing Recommendations */}
       {suggestions.length > 0 && (

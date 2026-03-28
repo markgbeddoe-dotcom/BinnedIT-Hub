@@ -4,8 +4,10 @@ import { B, fmtFull } from '../../theme';
 import { KPITile, SectionHeader, ChartCard, CustomTooltip } from '../UIComponents';
 import * as D from '../../data/financials';
 import { useAcquisitions } from '../../hooks/useMonthData';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 export default function BDMTab({ reportId, reportMonth, selectedMonth, monthCount, monthLabel }) {
+  const { isMobile } = useBreakpoint();
   const { data: acquisitionRows, isLoading } = useAcquisitions(reportMonth);
 
   // Use Supabase data if available, else fallback to D.*
@@ -26,13 +28,13 @@ export default function BDMTab({ reportId, reportMonth, selectedMonth, monthCoun
       {isLoading && (
         <div style={{ padding: '8px 0', fontSize: 12, color: B.textMuted, marginBottom: 8 }}>Loading acquisition data...</div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
         <KPITile label={`New Customers (${monthLabel})`} value={newCustomers.length} status="green" />
         <KPITile label="Dormant (90+ days)" value={D.dormantCustomers.length} status="red" />
         <KPITile label="Net Movement" value={`${newCustomers.length - D.dormantCustomers.length}`} status="red" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
         <ChartCard title={`New Customers — ${monthLabel} (${newCustomers.length})`}>
           <div style={{ overflowX: 'auto' }}>
             <div style={{ minWidth: 320 }}>

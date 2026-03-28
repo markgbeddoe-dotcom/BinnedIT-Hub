@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Routes, Route, useNavigate, useLocation, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { B, fontHead, fontBody, fmt, fmtFull } from './theme';
 import { AlertItem } from './components/UIComponents';
 import { saveMonthData, getMonthData, listMonths } from './data/dataStore';
@@ -34,6 +34,7 @@ import { useAvailableMonths } from './hooks/useMonthData';
 import { useBreakpoint } from './hooks/useBreakpoint';
 import { createReport, upsertFinancials, upsertCompliance } from './api/reports';
 import { queryClient } from './hooks/queryClient';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const VERSION = '2.2.0';
 const BUILD_DATE = '27 March 2026';
@@ -129,7 +130,7 @@ export default function App() {
     saveMonthData(monthKey, monthRecord);
     setWizardData(data);
     setSelectedMonth(monthKey);
-    navigate('/dashboard');
+    navigate('/dashboard/snapshot');
     setDashTab('snapshot');
 
     // Write to Supabase in the background (non-blocking)
@@ -205,6 +206,11 @@ export default function App() {
     }
   };
 
+  const handleMonthChangeGlobal = (monthKey) => {
+    setSelectedMonth(monthKey);
+    setWizardData(null);
+  };
+
   const toggleDone = (id) => {
     setWpDone(prev => {
       const next = { ...prev, [id]: prev[id] ? null : { by: 'Mark', at: new Date().toISOString() } };
@@ -216,27 +222,32 @@ export default function App() {
   // ===== HEADER =====
   const Header = () => (
     <div style={{background:'#000',borderBottom:`3px solid ${B.yellow}`,
-      padding:'12px 24px',display:'flex',alignItems:'center',gap:14,position:'sticky',top:0,zIndex:100}} className="no-print">
-      <button onClick={()=>setMenuOpen(!menuOpen)} style={{background:'none',border:'none',color:'#fff',fontSize:22,cursor:'pointer',padding:'2px 6px',lineHeight:1}}>☰</button>
-      <img src="/logo.jpg" alt="Binned-IT" style={{height:38,borderRadius:4}} onError={e=>{e.target.style.display='none'}} />
-      <div style={{flex:1}}>
-        <div style={{fontFamily:fontHead,fontSize:16,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:'#fff'}}>Dashboard Hub</div>
-        <div style={{fontSize:11,color:'#888'}}>Management Intelligence Platform &middot; v{VERSION}</div>
+      padding: isMobile ? '8px 12px' : '12px 24px',
+      display:'flex',alignItems:'center',gap: isMobile ? 8 : 14,
+      position:'sticky',top:0,zIndex:100,
+      minHeight: isMobile ? 56 : 70,
+    }} className="no-print">
+      <button onClick={()=>setMenuOpen(!menuOpen)} style={{background:'none',border:'none',color:'#fff',fontSize: isMobile ? 20 : 22,cursor:'pointer',padding:'2px 6px',lineHeight:1}}>☰</button>
+      <img src="/logo.jpg" alt="Binned-IT" style={{height: isMobile ? 28 : 38,borderRadius:4}} onError={e=>{e.target.style.display='none'}} />
+      <div style={{flex:1, minWidth:0}}>
+        <div style={{fontFamily:fontHead,fontSize: isMobile ? 13 : 16,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:'#fff', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>Dashboard Hub</div>
+        {!isMobile && <div style={{fontSize:11,color:'#888'}}>Management Intelligence Platform &middot; v{VERSION}</div>}
       </div>
       {currentScreen==='dashboard' && !isMobile && (
         <div style={{background:'#222',borderRadius:6,padding:'4px 8px',display:'flex',alignItems:'center',gap:6}}>
           <span style={{fontSize:11,color:'#888'}}>Viewing: </span>
-          <select value={selectedMonth} onChange={e=>{setSelectedMonth(e.target.value);setWizardData(null);}} style={{background:'#333',color:B.yellow,border:'1px solid #555',borderRadius:4,padding:'2px 6px',fontSize:12,fontFamily:fontHead,fontWeight:600,cursor:'pointer'}}>
+          <select value={selectedMonth} onChange={e=>handleMonthChangeGlobal(e.target.value)} style={{background:'#333',color:B.yellow,border:'1px solid #555',borderRadius:4,padding:'2px 6px',fontSize:12,fontFamily:fontHead,fontWeight:600,cursor:'pointer'}}>
             {availableMonths.map(m=><option key={m.key} value={m.key}>{m.label}</option>)}
           </select>
         </div>
       )}
-      {currentScreen==='dashboard' && (
+      {currentScreen==='dashboard' && !isMobile && (
         <PDFExport monthLabel={selLabel} />
       )}
       {currentScreen !== 'home' && (
         <button onClick={goHome} style={{background:'none',border:'1px solid #555',color:B.yellow,
-          padding:'6px 16px',borderRadius:6,cursor:'pointer',fontFamily:fontHead,fontSize:12,letterSpacing:'0.06em',textTransform:'uppercase'}}>Home</button>
+          padding: isMobile ? '4px 10px' : '6px 16px',borderRadius:6,cursor:'pointer',fontFamily:fontHead,
+          fontSize: isMobile ? 10 : 12,letterSpacing:'0.06em',textTransform:'uppercase', whiteSpace:'nowrap'}}>Home</button>
       )}
     </div>
   );
@@ -251,7 +262,7 @@ export default function App() {
       <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:16}}>
         {tiles.map(t => (
           <button key={t.id} onClick={() => {
-            if (t.id==='dashboard') { navigate('/dashboard'); setDashTab('snapshot'); }
+            if (t.id==='dashboard') { navigate('/dashboard/snapshot'); setDashTab('snapshot'); }
             else if (t.id==='generate'||t.id==='update') { navigate('/month-select'); }
             else if (t.id==='fleet-assets') { navigate('/fleet-assets'); }
             else navigate(`/${t.id}`);
@@ -277,6 +288,36 @@ export default function App() {
 
   // ===== DASHBOARD =====
   const Dashboard = () => {
+    const { tab: urlTab } = useParams();
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // Sync dashTab from URL param on mount/change
+    useEffect(() => {
+      if (urlTab && dashTabs.find(t => t.id === urlTab)) {
+        setDashTab(urlTab);
+      }
+    }, [urlTab]);
+
+    // Sync month from URL query param on mount
+    useEffect(() => {
+      const urlMonth = searchParams.get('month');
+      if (urlMonth && availableMonths.find(m => m.key === urlMonth)) {
+        setSelectedMonth(urlMonth);
+        setWizardData(null);
+      }
+    }, []);
+
+    const handleTabChange = (tabId) => {
+      setDashTab(tabId);
+      navigate(`/dashboard/${tabId}?month=${selectedMonth}`);
+    };
+
+    const handleMonthChange = (monthKey) => {
+      setSelectedMonth(monthKey);
+      setWizardData(null);
+      setSearchParams({ month: monthKey });
+    };
+
     const tabAlerts = alerts[dashTab === 'benchmarking' ? 'pricing' : dashTab] || [];
     const tabProps = { selectedMonth, monthCount, monthLabel: selLabel, reportId, reportMonth };
 
@@ -285,7 +326,7 @@ export default function App() {
         {/* Month selector on mobile — full-width above content */}
         {isMobile && (
           <div style={{marginBottom:12}} className="no-print">
-            <select value={selectedMonth} onChange={e=>{setSelectedMonth(e.target.value);setWizardData(null);}} style={{width:'100%',background:'#333',color:B.yellow,border:`1px solid ${B.cardBorder}`,borderRadius:6,padding:'8px 12px',fontSize:13,fontFamily:fontHead,fontWeight:600,cursor:'pointer'}}>
+            <select value={selectedMonth} onChange={e=>handleMonthChange(e.target.value)} style={{width:'100%',background:'#333',color:B.yellow,border:`1px solid ${B.cardBorder}`,borderRadius:6,padding:'8px 12px',fontSize:13,fontFamily:fontHead,fontWeight:600,cursor:'pointer'}}>
               {availableMonths.map(m=><option key={m.key} value={m.key}>{m.label}</option>)}
             </select>
           </div>
@@ -300,7 +341,7 @@ export default function App() {
         {/* Tab Bar — hidden on mobile (use MobileNav instead) */}
         <div style={{display:isMobile?'none':'flex',gap:2,overflowX:'auto',marginBottom:20,paddingBottom:2}} className="no-print">
           {dashTabs.map(t=>(
-            <button key={t.id} onClick={()=>setDashTab(t.id)} style={{
+            <button key={t.id} onClick={()=>handleTabChange(t.id)} style={{
               background:dashTab===t.id?B.yellow:'transparent',color:dashTab===t.id?'#0A0A0A':B.textMuted,
               border:'none',padding:'8px 14px',borderRadius:'8px 8px 0 0',cursor:'pointer',
               fontFamily:fontHead,fontSize:11,fontWeight:dashTab===t.id?700:500,letterSpacing:'0.06em',
@@ -309,17 +350,19 @@ export default function App() {
           ))}
         </div>
 
-        {dashTab === 'snapshot'      && <SnapshotTab      {...tabProps} />}
-        {dashTab === 'revenue'       && <RevenueTab       {...tabProps} />}
-        {dashTab === 'margins'       && <MarginsTab       {...tabProps} />}
-        {dashTab === 'benchmarking'  && <BenchmarkingTab  {...tabProps} />}
-        {dashTab === 'competitors'   && <CompetitorsTab   {...tabProps} onBack={()=>setDashTab('snapshot')} />}
-        {dashTab === 'bdm'           && <BDMTab           {...tabProps} />}
-        {dashTab === 'fleet'         && <FleetTab         {...tabProps} />}
-        {dashTab === 'debtors'       && <DebtorsTab       {...tabProps} />}
-        {dashTab === 'cashflow'      && <CashFlowTab      {...tabProps} />}
-        {dashTab === 'risk'          && <RiskEPATab       {...tabProps} wizardData={wizardData} />}
-        {dashTab === 'workplan'      && <WorkPlanTab      wpDone={wpDone} toggleDone={toggleDone} />}
+        <ErrorBoundary key={dashTab}>
+          {dashTab === 'snapshot'      && <SnapshotTab      {...tabProps} />}
+          {dashTab === 'revenue'       && <RevenueTab       {...tabProps} />}
+          {dashTab === 'margins'       && <MarginsTab       {...tabProps} />}
+          {dashTab === 'benchmarking'  && <BenchmarkingTab  {...tabProps} />}
+          {dashTab === 'competitors'   && <CompetitorsTab   {...tabProps} onBack={()=>setDashTab('snapshot')} />}
+          {dashTab === 'bdm'           && <BDMTab           {...tabProps} />}
+          {dashTab === 'fleet'         && <FleetTab         {...tabProps} />}
+          {dashTab === 'debtors'       && <DebtorsTab       {...tabProps} />}
+          {dashTab === 'cashflow'      && <CashFlowTab      {...tabProps} />}
+          {dashTab === 'risk'          && <RiskEPATab       {...tabProps} wizardData={wizardData} />}
+          {dashTab === 'workplan'      && <WorkPlanTab      wpDone={wpDone} toggleDone={toggleDone} />}
+        </ErrorBoundary>
 
         {/* Alerts panel */}
         {dashTab !== 'workplan' && tabAlerts.length > 0 && (
@@ -344,7 +387,7 @@ export default function App() {
         {menuItems.map(item => (
           <button key={item.id} onClick={()=>{
             if(item.id==='home') goHome();
-            else if(item.id==='dashboard'){navigate('/dashboard');setDashTab('snapshot');setMenuOpen(false);}
+            else if(item.id==='dashboard'){navigate('/dashboard/snapshot');setDashTab('snapshot');setMenuOpen(false);}
             else {navigate(`/${item.id}`);setMenuOpen(false);}
           }} style={{width:'100%',display:'flex',alignItems:'center',gap:12,padding:'12px 20px',background:'none',border:'none',cursor:'pointer',fontSize:14,color:B.textPrimary,textAlign:'left'}}
             onMouseOver={e=>e.currentTarget.style.background=B.bg} onMouseOut={e=>e.currentTarget.style.background='none'}>
@@ -368,7 +411,7 @@ export default function App() {
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
         {availableMonths.map((m,mIdx) => {
           const hasData = mIdx < D.months.length;
-          return (<button key={m.key} onClick={()=>{setSelectedMonth(m.key);navigate('/dashboard');setDashTab('snapshot');}}
+          return (<button key={m.key} onClick={()=>{setSelectedMonth(m.key);navigate('/dashboard/snapshot');setDashTab('snapshot');}}
             style={{background:B.cardBg,border:`2px solid ${hasData?B.green:B.cardBorder}`,borderRadius:10,padding:'16px 12px',cursor:'pointer',textAlign:'center',boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
             <div style={{fontFamily:fontHead,fontSize:14,fontWeight:700,color:B.textPrimary}}>{m.label}</div>
             <div style={{fontSize:10,color:hasData?B.green:B.textMuted,marginTop:4,fontWeight:600}}>{hasData?'Complete':'No data'}</div>
@@ -424,7 +467,7 @@ export default function App() {
         {availableMonths.map(m => {
           const isCurrent = m.key === selectedMonth;
           return (
-            <button key={m.key} onClick={()=>{setSelectedMonth(m.key);navigate('/wizard');}}
+            <button key={m.key} onClick={()=>{setSelectedMonth(m.key);navigate('/wizard');setDashTab('snapshot');}}
               style={{background:isCurrent?B.yellow:B.cardBg,color:isCurrent?'#000':B.textPrimary,border:'1px solid '+(isCurrent?B.yellow:B.cardBorder),
               borderRadius:10,padding:'16px 12px',cursor:'pointer',fontFamily:fontHead,fontSize:14,fontWeight:600,textAlign:'center',transition:'all 0.15s'}}
               onMouseOver={e=>{if(!isCurrent){e.currentTarget.style.background=B.bg;e.currentTarget.style.borderColor=B.yellow}}}
@@ -452,7 +495,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="/home" element={<Home />} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard" element={<Navigate to="/dashboard/snapshot" replace />} />
         <Route path="/dashboard/:tab" element={<Dashboard />} />
         <Route path="/month-select" element={<MonthSelect />} />
         <Route path="/wizard" element={<Wizard onComplete={handleWizardComplete} onHome={goHome} selectedMonth={selectedMonth} />} />
@@ -480,6 +523,7 @@ export default function App() {
           chatOpen={chatOpen}
           onNavigate={(s, t) => {
             if (s === 'home') navigate('/home');
+            else if (s === 'dashboard' && t) navigate(`/dashboard/${t}`);
             else navigate(`/${s}`);
             if (t) setDashTab(t);
             setMenuOpen(false);
