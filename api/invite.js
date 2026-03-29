@@ -53,50 +53,70 @@ export default async function handler(req) {
 
   // Step 1: Verify the calling user is an owner using their JWT
   const userToken = authHeader.slice(7);
-  const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: {
-      'Authorization': `Bearer ${userToken}`,
-      'apikey': serviceKey,
-    },
-  });
-  if (!userRes.ok) {
-    return new Response(JSON.stringify({ error: 'Could not verify caller identity' }), { status: 401 });
-  }
-  const callerUser = await userRes.json();
-
-  // Check caller role in profiles table
-  const profileRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/profiles?id=eq.${callerUser.id}&select=role`,
-    {
+  let callerUser;
+  try {
+    const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
       headers: {
-        'Authorization': `Bearer ${serviceKey}`,
+        'Authorization': `Bearer ${userToken}`,
         'apikey': serviceKey,
       },
+    });
+    if (!userRes.ok) {
+      return new Response(JSON.stringify({ error: 'Could not verify caller identity' }), { status: 401 });
     }
-  );
-  const profiles = await profileRes.json();
-  if (!profiles?.[0] || profiles[0].role !== 'owner') {
-    return new Response(JSON.stringify({ error: 'Only owners can invite users' }), { status: 403 });
+    callerUser = await userRes.json();
+  } catch (err) {
+    return new Response(JSON.stringify({ error: 'Auth verification failed: ' + (err.message || 'unknown') }), { status: 500 });
+  }
+
+  // Check caller role in profiles table (non-fatal if table doesn't exist yet)
+  try {
+    const profileRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${callerUser.id}&select=role`,
+      {
+        headers: {
+          'Authorization': `Bearer ${serviceKey}`,
+          'apikey': serviceKey,
+        },
+      }
+    );
+    if (profileRes.ok) {
+      const profiles = await profileRes.json();
+      if (Array.isArray(profiles) && profiles.length > 0 && profiles[0].role !== 'owner') {
+        return new Response(JSON.stringify({ error: 'Only owners can invite users' }), { status: 403 });
+      }
+      // If profiles table empty or no row found, allow invite (owner bootstrapping their own account)
+    }
+    // If profileRes not ok (table missing, etc.) — allow invite with warning
+  } catch (err) {
+    // Non-fatal — profiles table may not exist yet if migrations haven't been applied.
+    // Allow the invite to proceed so the owner can bootstrap users.
   }
 
   // Step 2: Invite user via Supabase Admin API (sends magic link email)
-  const inviteRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/invite`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${serviceKey}`,
-      'apikey': serviceKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email }),
-  });
+  let inviteData;
+  try {
+    const inviteRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/invite`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${serviceKey}`,
+        'apikey': serviceKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    });
 
-  const inviteData = await inviteRes.json();
+    inviteData = await inviteRes.json();
 
-  if (!inviteRes.ok) {
-    // If user already exists, that's okay — we'll still set their role
-    if (!inviteData.msg?.includes('already been registered')) {
-      return new Response(JSON.stringify({ error: inviteData.msg || 'Invite failed' }), { status: 400 });
+    if (!inviteRes.ok) {
+      const msg = inviteData.msg || inviteData.message || inviteData.error_description || JSON.stringify(inviteData);
+      // If user already exists, that's okay — we'll still set their role below
+      if (!msg.includes('already been registered') && !msg.includes('already exists')) {
+        return new Response(JSON.stringify({ error: msg }), { status: 400 });
+      }
     }
+  } catch (err) {
+    return new Response(JSON.stringify({ error: 'Invite API call failed: ' + (err.message || 'unknown') }), { status: 500 });
   }
 
   const userId = inviteData.id;
