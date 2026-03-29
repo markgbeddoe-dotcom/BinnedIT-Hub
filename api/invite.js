@@ -1,6 +1,24 @@
 // Vercel Edge Function — invite a new user via Supabase Admin API
 // Uses SUPABASE_SERVICE_ROLE_KEY (server-side only, never exposed to browser)
 
+/**
+ * @file api/invite.js — Vercel Edge Function
+ *
+ * Sends a Supabase magic-link invitation email to a new user and
+ * creates/updates their profile row with the assigned role.
+ *
+ * Security:
+ * - Caller must be authenticated (Authorization: Bearer <JWT>)
+ * - Caller must have role = 'owner' in the profiles table
+ * - SUPABASE_SERVICE_ROLE_KEY is used server-side only
+ *
+ * Request body: { email: string, role: 'owner'|'manager'|'bookkeeper'|'viewer' }
+ * Response: { success: true, userId: string } or { error: string }
+ *
+ * @param {Request} req - Edge runtime Request object
+ * @returns {Response} JSON result
+ */
+
 export const config = { runtime: 'edge' };
 
 const SUPABASE_URL = 'https://dkjwyzjzdcgrepbgiuei.supabase.co';

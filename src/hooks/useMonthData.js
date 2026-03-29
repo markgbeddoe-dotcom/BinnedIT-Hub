@@ -1,3 +1,32 @@
+/**
+ * @file useMonthData.js
+ * TanStack Query hooks for all Supabase report data.
+ *
+ * All query hooks use a staleTime of 5 minutes and retry 2× on failure.
+ * Mutation hooks invalidate related query caches on success so UI updates immediately.
+ *
+ * Query hooks (read):
+ * - useAvailableMonths()           — list of months with data in monthly_reports
+ * - useFinancials(reportMonth)     — financials_monthly row for the selected month
+ * - useYTDFinancials(toMonth)      — all financials_monthly rows from Jul to toMonth
+ * - useBalanceSheet(reportMonth)   — balance_sheet row for the selected month
+ * - useDebtors(reportMonth)        — debtor_aging rows for the selected month
+ * - useBinPerformance(reportMonth) — bin_type_performance rows for the selected month
+ * - useCompliance(reportMonth)     — compliance row for the selected month
+ * - useAcquisitions(reportMonth)   — customer_acquisitions rows for the selected month
+ * - useReport(reportMonth)         — monthly_reports row for the selected month
+ *
+ * Mutation hooks (write — wizard and settings):
+ * - useCreateReport()              — create a new monthly_reports row
+ * - useUpsertFinancials()          — write financials_monthly (wizard step)
+ * - useUpsertBalanceSheet()        — write balance_sheet (wizard step)
+ * - useUpsertDebtors()             — write debtor_aging rows (wizard step)
+ * - useUpsertBinPerformance()      — write bin_type_performance rows (wizard step)
+ * - useUpsertCompliance()          — write compliance row (wizard step)
+ *
+ * All hooks require: reportMonth in 'YYYY-MM-DD' format (first day of month).
+ */
+
 import { useQuery, useMutation } from '@tanstack/react-query'
 import {
   getAvailableMonths,

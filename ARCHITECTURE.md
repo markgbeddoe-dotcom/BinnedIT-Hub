@@ -933,7 +933,7 @@ Cut the Snapshot tab render block out of `App.jsx`, paste it into the new file, 
 
 ### 1. The 5 Most Important Architectural Decisions and Their Verdicts
 
-**ADR-004 (AI Security):** URGENT — move Anthropic API call to Vercel Edge Function immediately. The API key is exposed in a running production application. This is Sprint 2A Day 1, not Sprint 3.
+**ADR-004 (AI Security):** URGENT — move Anthropic API call to Vercel Edge Function immediately. The API key is exposed in a running production application. This is Sprint 2A Day 1, not Sprint 3. Status: RESOLVED — Vercel Edge Function implemented Sprint 2A. Model upgraded to Sonnet 4.6 Sprint 7.
 
 **ADR-005 (Data Layer):** The parallel data bridge pattern is the right call. Wire tabs one at a time in dependency order, keep hardcoded data as fallback during transition. The Wizard writes last via a PostgreSQL RPC function for atomicity. Do not wire all tabs simultaneously.
 
@@ -990,3 +990,77 @@ Touch `api/chat.js` first (new Vercel Edge Function — resolves the live API ke
 - `C:\Dev\Binned-IT Dev\binnedit-hub v2.2\supabase\migrations\001_initial_schema.sql`
 - `C:\Dev\Binned-IT Dev\binnedit-hub v2.2\src\data\analysisEngine.js`
 - `C:\Dev\Binned-IT Dev\binnedit-hub v2.2\src\components\Wizard.jsx`
+
+---
+
+### ADR-016: AI Assistant Architecture
+
+**Status:** Accepted — Implemented Sprint 2A + Sprint 7
+
+**Context:** Sprint 1 had the Anthropic API key directly in the React app (`App.jsx`), called from the browser. This exposed a live production credential. Additionally, the AI had no access to financial data context, making responses generic.
+
+**Decision:**
+1. Move all Anthropic API calls to a Vercel Edge Function (`api/chat.js`)
+2. Build context from two sources: (a) Supabase financials_monthly + alerts_log, (b) client-supplied `financialSummary` built from `src/data/financials.js` hardcoded data
+3. Add per-tab `AIInsightsPanel` component for structured analysis
+4. Use Claude Sonnet 4.6 (not Haiku) for business-grade reasoning quality
+5. Stream responses via Server-Sent Events (SSE) for real-time UX
+
+**Rationale:**
+- Server-side proxy is the only acceptable way to use API keys in a browser app
+- Dual context sources (Supabase + hardcoded fallback) ensure AI always has financial context regardless of database state
+- SSE streaming eliminates the perceived latency of waiting for a full AI response
+- Sonnet 4.6 produces structured, actionable business insights; Haiku 4.5 produced generic answers
+- Per-tab panels reduce cognitive load vs a single global chat — users get insights in context
+
+**Consequences:**
+- `api/chat.js` is a Vercel Edge Function — requires `vercel dev` locally (not `npm run dev`)
+- `ANTHROPIC_API_KEY` must be set in Vercel environment variables (server-only, no `VITE_` prefix)
+- `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` also required server-side for rate limiting and context fetch
+- Rate limiting: 50 messages/user/day enforced via `ai_chat_sessions` Supabase table
+- `AIInsightsPanel` is stateless between sessions — insights are not persisted (by design — regeneration is cheap)
+
+**Implementation files:**
+- `api/chat.js` — Edge Function, model: claude-sonnet-4-6, max_tokens: 2048, SSE streaming
+- `src/components/ChatPanel.jsx` — Chat UI, builds financialSummary from D.* data
+- `src/components/AIInsightsPanel.jsx` — Reusable insights panel, props: tabName, contextSummary, selectedMonth, selLabel
+- `src/components/tabs/SnapshotTab.jsx` — Uses AIInsightsPanel for business snapshot analysis
+- `src/components/tabs/RevenueTab.jsx` — Uses AIInsightsPanel for revenue analysis
+- `src/components/CompetitorPage.jsx` — Uses AIInsightsPanel with marketResearch context
+
+---
+
+### ADR-017: PWA and Offline Strategy
+
+**Status:** Accepted — Implemented Sprint 3 + Sprint 6
+
+**Context:** The dashboard is used by Mark on-site and by Jake in the yard — network connectivity may be intermittent. A PWA install prompt improves daily engagement.
+
+**Decision:** Implement PWA with service worker (cache-first for static assets, network-first for Supabase API) and install prompt. Icons are JPEG files served from /icon-192.png and /icon-512.png paths (browser accepts JPEG at PNG path for PWA purposes).
+
+**Rationale:** Full offline capability for a data-heavy dashboard would require complex sync logic. The pragmatic approach: cache the app shell (static assets) so it loads offline, but show a "No connection" banner for data operations that require Supabase. This gives the install/home-screen benefit without offline-sync complexity.
+
+**Consequences:**
+- `public/sw.js` caches static assets on install
+- `public/manifest.json` declares PWA metadata and icon paths
+- VAPID keys for push notifications are placeholder — must generate real keys with `npx web-push generate-vapid-keys` before enabling push in production
+- `src/components/OfflineBanner.jsx` shows when navigator.onLine is false
+
+---
+
+### ADR-018: Code Splitting Strategy
+
+**Status:** Accepted — Implemented Sprint 6
+
+**Context:** Initial bundle was 1,379kB (Vite default: single chunk). Lighthouse flagged this as a performance concern.
+
+**Decision:** Use Vite `manualChunks` in `vite.config.js` to split into 5 vendor chunks: vendor-react, vendor-charts, vendor-supabase, vendor-query, and main app code.
+
+**Rationale:** Manual chunking is more predictable than automatic splitting for this dependency profile. Recharts (largest dependency) warrants its own chunk so tabs that don't use charts don't pay the load cost. Supabase client is similarly isolated.
+
+**Result:** Largest chunk reduced from 1,379kB to ~536kB (app code). Total assets: 5 chunks. Chunk size warning remains in Vite output but is non-blocking.
+
+**Consequences:**
+- `vite.config.js` contains explicit chunk assignments per npm package
+- Any new large dependency should be assessed for its own chunk assignment
+- Lazy loading of route-level components (React.lazy + Suspense) is the recommended next step if bundle size becomes a blocking concern

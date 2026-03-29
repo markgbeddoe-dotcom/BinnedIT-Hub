@@ -1,3 +1,21 @@
+/**
+ * @file AuthContext.jsx
+ *
+ * Provides authentication state and role helpers to the entire app.
+ * Wraps Supabase Auth — session state is kept in sync via onAuthStateChange.
+ *
+ * Available via useAuth() hook:
+ * - session: Supabase session object (null if not logged in)
+ * - user: session.user (null if not logged in)
+ * - profile: profiles table row (id, role, full_name, email)
+ * - loading: true while session is being initialised
+ * - isOwner: boolean — role === 'owner'
+ * - isManager: boolean — role in ['owner', 'manager']
+ * - canWrite: boolean — role in ['owner', 'bookkeeper']
+ * - signIn(email, password): async, returns { error }
+ * - signOut(): async
+ */
+
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 

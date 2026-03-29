@@ -1,3 +1,13 @@
+/**
+ * @file analysisEngine.js
+ * Analysis Engine — generates categorised alerts and recommended actions
+ * for each dashboard tab based on the selected month range.
+ *
+ * All analysis uses the hardcoded D.* data from financials.js as the data source.
+ * When Supabase data is available, tabs render live data but alerts still use
+ * the hardcoded dataset (source of truth for alert thresholds).
+ */
+
 // Analysis Engine — generates recommended actions per dashboard tab
 import * as D from './financials';
 
@@ -6,6 +16,16 @@ const sum = arr => arr.reduce((a,b)=>a+b,0);
 const last = arr => arr[arr.length-1];
 const prev = arr => arr[arr.length-2];
 
+/**
+ * Generates categorised alerts for all dashboard tabs.
+ *
+ * @param {number} monthCount - Number of months to include (1 = Jul only, 8 = Jul–Feb)
+ * @returns {Object} alerts - Keyed by tab id: snapshot, revenue, margins, pricing,
+ *   competitors, bdm, fleet, debtors, cashflow, risk
+ * @example
+ *   const alerts = generateAlerts(8); // All 8 months
+ *   const snapshotAlerts = alerts.snapshot; // [{sev:'critical', text:'...'}]
+ */
 export function generateAlerts(monthCount) {
   const n = Math.min(Math.max(monthCount || D.months.length, 1), D.months.length);
   const alerts = {};

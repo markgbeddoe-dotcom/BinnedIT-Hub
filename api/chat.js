@@ -1,6 +1,29 @@
 // Vercel Edge Function — AI Chat Proxy (Security Fix)
 // POST /api/chat → streams Anthropic response as SSE
 
+/**
+ * @file api/chat.js — Vercel Edge Function
+ *
+ * Proxies chat requests to the Anthropic Claude API.
+ *
+ * Security: The ANTHROPIC_API_KEY is never exposed to the browser.
+ * All requests must come from the authenticated Binned-IT SPA.
+ *
+ * Rate limiting: 50 messages/user/day via ai_chat_sessions table.
+ * If SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY are not set, rate
+ * limiting is skipped (non-fatal).
+ *
+ * Financial context is injected into the system prompt from two sources:
+ * 1. Supabase financials_monthly (live data, if available)
+ * 2. financialSummary from request body (client-built from D.* hardcoded data)
+ *
+ * Market research mode: pass { marketResearch: true } in the request body
+ * to enable competitive intelligence system prompt additions.
+ *
+ * @param {Request} req - Edge runtime Request object
+ * @returns {Response} SSE stream of AI response chunks, or JSON error
+ */
+
 export const config = { runtime: 'edge' }
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'

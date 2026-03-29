@@ -1,3 +1,17 @@
+/**
+ * @file AIInsightsPanel.jsx
+ * Reusable AI insights panel component.
+ *
+ * Renders a collapsible panel with a "Generate" button that calls /api/chat
+ * and streams a structured analysis of the provided contextSummary.
+ *
+ * Used by: SnapshotTab (Business Snapshot), RevenueTab (Revenue Analysis),
+ *          CompetitorPage (Market Research)
+ *
+ * Requires: ANTHROPIC_API_KEY set in Vercel environment variables.
+ *           Use `vercel dev` locally — does not work with `npm run dev`.
+ */
+
 import React, { useState, useRef } from 'react';
 import { B, fontHead, fontBody } from '../theme';
 import { useAuth } from '../context/AuthContext';
