@@ -96,7 +96,7 @@ export default async function handler(req) {
   // Step 2: Invite user via Supabase Admin API (sends magic link email)
   let inviteData;
   try {
-    const inviteRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/invite`, {
+    const inviteRes = await fetch(`${SUPABASE_URL}/auth/v1/invite`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${serviceKey}`,
