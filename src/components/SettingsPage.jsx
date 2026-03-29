@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { B, fontHead, fontBody } from '../theme';
 import { SectionHeader } from './UIComponents';
 import { getAlertThresholds, upsertThreshold, getProfiles, updateProfileRole, getBinTypes, upsertBinType, inviteUser } from '../api/settings';
+import { getXeroStatus, syncXeroMonth, getXeroSyncLog } from '../api/xero';
 import { useAuth } from '../context/AuthContext';
 
 const iStyle = {
@@ -49,6 +50,11 @@ export default function SettingsPage() {
   const [inviteRole, setInviteRole] = useState('bookkeeper');
   const [inviteState, setInviteState] = useState(null); // null | 'sending' | 'success' | 'error'
   const [inviteMsg, setInviteMsg] = useState('');
+  const [xeroStatus, setXeroStatus] = useState(null);
+  const [xeroSyncing, setXeroSyncing] = useState(false);
+  const [xeroSyncMonth, setXeroSyncMonth] = useState('2026-02');
+  const [xeroSyncResult, setXeroSyncResult] = useState(null);
+  const [xeroSyncLog, setXeroSyncLog] = useState([]);
 
   const handleInvite = async (e) => {
     e.preventDefault();
@@ -66,8 +72,26 @@ export default function SettingsPage() {
       setInviteMsg(err.message);
     }
   };
+  const handleXeroSync = async () => {
+    setXeroSyncing(true);
+    setXeroSyncResult(null);
+    try {
+      const result = await syncXeroMonth(xeroSyncMonth);
+      setXeroSyncResult({ ok: true, summary: result.summary });
+      getXeroSyncLog().then(setXeroSyncLog).catch(() => {});
+    } catch (e) {
+      setXeroSyncResult({ ok: false, error: e.message });
+    }
+    setXeroSyncing(false);
+  };
+
   const [pushStatus, setPushStatus] = useState('checking'); // 'checking'|'unsupported'|'denied'|'subscribed'|'unsubscribed'
   const [pushMsg, setPushMsg] = useState('');
+
+  useEffect(() => {
+    getXeroStatus().then(setXeroStatus).catch(() => setXeroStatus({ connected: false }));
+    getXeroSyncLog().then(setXeroSyncLog).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -324,6 +348,87 @@ export default function SettingsPage() {
           <div style={{ marginTop: 10, fontSize: 12, color: pushStatus === 'subscribed' ? B.green : B.textMuted }}>{pushMsg}</div>
         )}
       </div>
+
+      {/* ── Xero Integration ── */}
+      {isOwner && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: fontHead, fontSize: 16, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 4 }}>Xero Integration</div>
+          <div style={{ fontSize: 13, color: B.textSecondary, marginBottom: 16 }}>Connect Xero to automatically sync your P&L, Balance Sheet, and AR data each month.</div>
+
+          {/* Connection status */}
+          <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 10, padding: 20, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <div style={{ fontFamily: fontHead, fontSize: 13, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase' }}>
+                  {xeroStatus?.connected ? `Connected — ${xeroStatus.tenantName || 'Xero'}` : 'Not Connected'}
+                </div>
+                <div style={{ fontSize: 11, color: B.textMuted, marginTop: 2 }}>
+                  {xeroStatus?.connected ? `Last token refresh: ${xeroStatus.updatedAt ? new Date(xeroStatus.updatedAt).toLocaleDateString('en-AU') : 'Unknown'}` : 'Click Connect to link your Xero organisation'}
+                </div>
+              </div>
+              <a
+                href="/api/xero-auth"
+                style={{ background: xeroStatus?.connected ? B.bg : B.yellow, color: xeroStatus?.connected ? B.textSecondary : '#fff', border: `1px solid ${xeroStatus?.connected ? B.cardBorder : B.yellow}`, padding: '8px 20px', borderRadius: 6, cursor: 'pointer', fontFamily: fontHead, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', textDecoration: 'none', display: 'inline-block' }}
+              >
+                {xeroStatus?.connected ? 'Reconnect' : 'Connect Xero'}
+              </a>
+            </div>
+          </div>
+
+          {/* Sync controls */}
+          {xeroStatus?.connected && (
+            <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 10, padding: 20, marginBottom: 16 }}>
+              <div style={{ fontFamily: fontHead, fontSize: 12, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 12 }}>Sync Month from Xero</div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <select
+                  value={xeroSyncMonth}
+                  onChange={e => setXeroSyncMonth(e.target.value)}
+                  style={{ background: B.bg, border: `1px solid ${B.cardBorder}`, borderRadius: 6, padding: '8px 12px', fontSize: 13, color: B.textPrimary, fontFamily: fontBody }}
+                >
+                  {['2025-07','2025-08','2025-09','2025-10','2025-11','2025-12','2026-01','2026-02','2026-03','2026-04'].map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleXeroSync}
+                  disabled={xeroSyncing}
+                  style={{ background: B.green, border: 'none', borderRadius: 6, padding: '8px 20px', cursor: xeroSyncing ? 'wait' : 'pointer', fontFamily: fontHead, fontSize: 12, fontWeight: 700, color: '#fff', textTransform: 'uppercase' }}
+                >
+                  {xeroSyncing ? 'Syncing...' : 'Sync Now'}
+                </button>
+              </div>
+              {xeroSyncResult && (
+                <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 6, background: xeroSyncResult.ok ? `${B.green}15` : `${B.red}15`, border: `1px solid ${xeroSyncResult.ok ? B.green : B.red}40` }}>
+                  {xeroSyncResult.ok ? (
+                    <div style={{ fontSize: 12, color: B.green }}>
+                      ✓ Synced {xeroSyncMonth} — Revenue: ${Math.round(xeroSyncResult.summary?.revenue || 0).toLocaleString('en-AU')} | Net Profit: ${Math.round(xeroSyncResult.summary?.netProfit || 0).toLocaleString('en-AU')} | GM: {(xeroSyncResult.summary?.grossMargin || 0).toFixed(1)}%
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: B.red }}>✗ {xeroSyncResult.error}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sync log */}
+          {xeroSyncLog.length > 0 && (
+            <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 10, padding: 20 }}>
+              <div style={{ fontFamily: fontHead, fontSize: 12, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 10 }}>Sync History</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {xeroSyncLog.slice(0, 5).map((log, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 12 }}>
+                    <span style={{ color: log.status === 'success' ? B.green : B.red, fontWeight: 700 }}>{log.status === 'success' ? '✓' : '✗'}</span>
+                    <span style={{ color: B.textPrimary }}>{log.sync_month?.slice(0, 7)}</span>
+                    <span style={{ color: B.textMuted }}>{new Date(log.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span style={{ color: B.textMuted, flex: 1 }}>{log.message || ''}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Company Info */}
       <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24 }}>
