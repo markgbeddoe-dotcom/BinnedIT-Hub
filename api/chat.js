@@ -4,8 +4,8 @@
 export const config = { runtime: 'edge' }
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
-const MODEL = 'claude-haiku-4-5-20251001'
-const MAX_TOKENS = 1024
+const MODEL = 'claude-sonnet-4-6'
+const MAX_TOKENS = 2048
 const DAILY_LIMIT = 50
 
 export default async function handler(req) {
@@ -49,7 +49,7 @@ export default async function handler(req) {
     })
   }
 
-  const { messages, reportMonth, userId } = body || {}
+  const { messages, reportMonth, userId, financialSummary, marketResearch } = body || {}
 
   if (!messages || !Array.isArray(messages)) {
     return new Response(JSON.stringify({ error: 'messages array required' }), {
@@ -148,7 +148,7 @@ Key business facts:
 - Specialises in general waste, asbestos removal, contaminated soil, and green waste
 - Financial year runs July to June
 - Based in Seaford, Melbourne
-${financialContext}
+${financialContext}${!financialContext && financialSummary ? `\nFINANCIAL CONTEXT (from dashboard):\n${financialSummary}` : ''}${marketResearch ? `\nYou are conducting market research analysis for the skip bin hire industry in Melbourne. Focus on pricing strategy, competitive positioning, and market opportunities. Use current knowledge of the Australian waste management industry.` : ''}
 
 Your role:
 - Provide specific, actionable financial and operational advice

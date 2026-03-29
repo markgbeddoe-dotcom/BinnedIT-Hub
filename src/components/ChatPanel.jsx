@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { B, fontHead, fontBody } from '../theme';
+import { B, fontHead, fontBody, fmtFull } from '../theme';
 import * as D from '../data/financials';
+import { useAuth } from '../context/AuthContext';
 
 const SUGGESTED_QUESTIONS = [
   "What's my biggest cash flow risk?",
@@ -23,6 +24,21 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
   }, [chatMsgs]);
 
   const mi = (monthCount || 1) - 1;
+  const { user } = useAuth();
+
+  const ytdRevenue = D.totalRevenue.slice(0, mi + 1).reduce((a, b) => a + b, 0);
+  const ytdProfit = D.netProfit.slice(0, mi + 1).reduce((a, b) => a + b, 0);
+  const financialSummary = [
+    `Period: ${selLabel || 'Feb 2026'} (month ${mi + 1} of FY)`,
+    `Revenue this month: $${Math.round(D.totalRevenue[mi] || 0).toLocaleString('en-AU')}`,
+    `YTD Revenue: $${Math.round(ytdRevenue).toLocaleString('en-AU')}`,
+    `Gross Margin: ${D.gmPct[mi] || 0}%`,
+    `Net Profit this month: $${Math.round(D.netProfit[mi] || 0).toLocaleString('en-AU')}`,
+    `YTD Net Profit: $${Math.round(ytdProfit).toLocaleString('en-AU')}`,
+    `Cash Balance: $${Math.round((D.cashBalance || [])[mi] || 0).toLocaleString('en-AU')}`,
+    `Accounts Receivable: $${Math.round(D.arTotal || 0).toLocaleString('en-AU')} (overdue: $${Math.round(D.arOverdue || 0).toLocaleString('en-AU')})`,
+    `Wages: $${Math.round((D.wages || [])[mi] || 0).toLocaleString('en-AU')} | Fuel: $${Math.round((D.fuelCosts || [])[mi] || 0).toLocaleString('en-AU')}`,
+  ].join('\n');
 
   const sendChat = async (overrideMsg) => {
     const userMsg = overrideMsg || chatInput.trim();
@@ -43,7 +59,8 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
         body: JSON.stringify({
           messages: [...history, { role: 'user', content: userMsg }],
           reportMonth: selectedMonth || '2026-02',
-          userId: null,
+          userId: user?.id || null,
+          financialSummary,
         }),
       });
 

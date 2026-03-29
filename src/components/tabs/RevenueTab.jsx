@@ -5,6 +5,7 @@ import { SectionHeader, ChartCard, CustomTooltip } from '../UIComponents';
 import * as D from '../../data/financials';
 import { useYTDFinancials } from '../../hooks/useMonthData';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import AIInsightsPanel from '../AIInsightsPanel';
 
 export default function RevenueTab({ reportId, reportMonth, selectedMonth, monthCount, monthLabel }) {
   const { isMobile } = useBreakpoint();
@@ -54,6 +55,17 @@ export default function RevenueTab({ reportId, reportMonth, selectedMonth, month
 
   const pieColors = [B.yellow, B.orange, '#8B6914', B.green, B.purple];
 
+  const mi = (monthCount || 1) - 1;
+  const ytdRev = pieMixData.reduce((a, c) => a + c.value, 0);
+  const revenueContext = [
+    `Period: YTD to ${monthLabel} (${monthCount} month${monthCount > 1 ? 's' : ''})`,
+    `YTD Revenue: $${Math.round(ytdRev).toLocaleString('en-AU')}`,
+    `This month revenue: $${Math.round(D.totalRevenue[mi] || 0).toLocaleString('en-AU')}`,
+    `Revenue by category (YTD): ${pieMixData.map(c => `${c.name}: $${Math.round(c.value).toLocaleString('en-AU')}`).join(', ')}`,
+    `Top category: ${pieMixData.sort((a, b) => b.value - a.value)[0]?.name || 'N/A'}`,
+    `Gross Margin this month: ${D.gmPct[mi] || 0}%`,
+  ].join('\n');
+
   return (
     <div>
       <SectionHeader title="Revenue Analysis" subtitle={`Revenue by category and trend — YTD to ${monthLabel}`} />
@@ -102,6 +114,12 @@ export default function RevenueTab({ reportId, reportMonth, selectedMonth, month
           </div>
         </ChartCard>
       </div>
+      <AIInsightsPanel
+        tabName="Revenue Analysis"
+        contextSummary={revenueContext}
+        selectedMonth={reportMonth}
+        selLabel={monthLabel}
+      />
     </div>
   );
 }

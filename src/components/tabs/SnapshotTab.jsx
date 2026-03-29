@@ -5,6 +5,7 @@ import { KPITile, SectionHeader, ChartCard, CustomTooltip } from '../UIComponent
 import * as D from '../../data/financials';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useFinancials, useBalanceSheet, useYTDFinancials } from '../../hooks/useMonthData';
+import AIInsightsPanel from '../AIInsightsPanel';
 
 const FALLBACK_MONTHS = [
   {key:'2025-07',label:'Jul 2025'},{key:'2025-08',label:'Aug 2025'},{key:'2025-09',label:'Sep 2025'},
@@ -102,6 +103,17 @@ export default function SnapshotTab({ reportId, reportMonth, selectedMonth, mont
   const cNP = compareFinancials?.net_profit || (compareMi >= 0 ? D.netProfit[compareMi] : 0);
   const cGP = compareFinancials?.gross_profit || (compareMi >= 0 ? D.grossProfit[compareMi] : 0);
   const cGMPct = compareFinancials?.gross_margin_pct || (compareMi >= 0 ? D.gmPct[compareMi] : 0);
+
+  const snapshotContext = [
+    `Month: ${monthLabel}`,
+    `Revenue: $${Math.round(financials?.rev_total ?? D.totalRevenue[mi] ?? 0).toLocaleString('en-AU')}`,
+    `Gross Margin: ${(financials?.gross_margin_pct ?? D.gmPct[mi] ?? 0).toFixed(1)}%`,
+    `Net Profit: $${Math.round(financials?.net_profit ?? D.netProfit[mi] ?? 0).toLocaleString('en-AU')}`,
+    `YTD Revenue: $${Math.round(ytdRev).toLocaleString('en-AU')}`,
+    `YTD Net Profit: $${Math.round(ytdNPTotal).toLocaleString('en-AU')}`,
+    `Cash Balance: $${Math.round((D.cashBalance || [])[mi] || 0).toLocaleString('en-AU')}`,
+    `AR Total: $${Math.round(D.arTotal || 0).toLocaleString('en-AU')} (overdue: $${Math.round(D.arOverdue || 0).toLocaleString('en-AU')})`,
+  ].join('\n');
 
   return (
     <div>
@@ -247,6 +259,12 @@ export default function SnapshotTab({ reportId, reportMonth, selectedMonth, mont
         <KPITile label="Fixed Assets" value={fmtFull(bsFixedAssets)} sub="Trucks, bins, equipment" status="green" />
         <KPITile label="Current Year Earnings" value={fmtFull(bsCurrentYearEarnings)} status={bsCurrentYearEarnings > 0 ? 'green' : 'red'} />
       </div>
+      <AIInsightsPanel
+        tabName="Business Snapshot"
+        contextSummary={snapshotContext}
+        selectedMonth={reportMonth}
+        selLabel={monthLabel}
+      />
     </div>
   );
 }

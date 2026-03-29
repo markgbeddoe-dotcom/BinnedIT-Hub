@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { B, fontHead, fmtFull } from '../theme';
 import { useCompetitorRates, useUpsertRate, useDeleteRate } from '../hooks/useCompetitors';
+import AIInsightsPanel from './AIInsightsPanel';
 
 const defaultBinServices = [
   '4m³ GW','6m³ GW','8m³ GW','10m³ GW','12m³ GW','16m³ GW','23m³ GW',
@@ -155,6 +156,16 @@ export default function CompetitorPage({ onBack }) {
   const iStyle = {background:B.bg,border:`1px solid ${B.cardBorder}`,borderRadius:6,padding:'8px 12px',fontSize:13,color:B.textPrimary,width:'100%',outline:'none',fontFamily:'"DM Sans",system-ui,sans-serif'};
   const btnS = (c) => ({background:'none',border:`1px solid ${c}`,color:c,padding:'6px 16px',borderRadius:6,cursor:'pointer',fontFamily:fontHead,fontSize:11,fontWeight:600,textTransform:'uppercase'});
 
+  const marketContext = [
+    `Binned-IT pricing (ex GST): ${Object.entries(binnedItRates).map(([k,v]) => `${k}: $${v}`).join(', ')}`,
+    `Competitors with data: ${competitors.filter(c => Object.keys(c.rates).length > 0).map(c => `${c.name} (${Object.keys(c.rates).length} rates)`).join(', ')}`,
+    `Services above market average: ${binServices.filter(s => { const c = getComparison(s); return c && c.diff > 0; }).join(', ') || 'none'}`,
+    `Services below market average: ${binServices.filter(s => { const c = getComparison(s); return c && c.diff < 0; }).join(', ') || 'none'}`,
+    `Services with no competitor data: ${binServices.filter(s => !competitors.some(c => typeof c.rates[s] === 'number')).join(', ')}`,
+    `Market: Melbourne skip bin hire, Seaford area. Key competitors: ${competitors.map(c => c.name).join(', ')}`,
+    `Industry context: Residential and commercial skip bin hire. Products include general waste, asbestos, contaminated soil, green waste. Highly price-sensitive residential market, less so for commercial/regulated waste (asbestos, soil).`,
+  ].join('\n');
+
   if (isLoading) {
     return (
       <div style={{maxWidth:1200,margin:'0 auto',padding:'20px 24px'}}>
@@ -276,6 +287,12 @@ export default function CompetitorPage({ onBack }) {
           ))}
         </div>
       </div>
+      <AIInsightsPanel
+        tabName="Market Research"
+        contextSummary={marketContext}
+        selectedMonth="2026-02"
+        selLabel="Melbourne market"
+      />
     </div>
   );
 }
