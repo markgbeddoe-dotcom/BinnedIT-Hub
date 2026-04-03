@@ -1,65 +1,75 @@
 -- 008_bookings.sql
--- Public customer booking form — bookings table
--- Sprint 8: Customer Booking Form
+-- Bookings table — Customer Booking Form + Dispatch Board
+-- Sprint 8: merged from booking-form branch and dispatch board branch
 
-create table if not exists public.bookings (
-  id              uuid        primary key default gen_random_uuid(),
-  customer_name   text        not null,
-  customer_email  text        not null,
-  customer_phone  text        not null,
-  address         text        not null,
-  suburb          text        not null,
-  postcode        text        not null,
-  bin_size        text        not null check (bin_size in ('2m3','4m3','6m3','8m3')),
-  waste_type      text        not null,
-  delivery_date   date        not null,
-  collection_date date        not null,
+CREATE TABLE IF NOT EXISTS public.bookings (
+  id                   uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_name        text        NOT NULL,
+  customer_email       text,
+  customer_phone       text,
+  address              text,
+  suburb               text,
+  postcode             text,
+  bin_size             text,
+  waste_type           text,
+  delivery_date        date,
+  collection_date      date,
   special_instructions text,
-  price           numeric(10,2) not null,
-  status          text        not null default 'pending'
-                    check (status in ('pending','confirmed','scheduled','completed','cancelled')),
-  created_at      timestamptz not null default now(),
-  updated_at      timestamptz not null default now()
+  price                numeric(10,2),
+  -- Dispatch fields
+  driver_name          text,
+  truck_id             text,
+  scheduled_date       date,
+  estimated_cost       numeric(10,2),
+  margin_pct           numeric(5,2),
+  notes                text,
+  status               text        NOT NULL DEFAULT 'pending'
+                         CHECK (status IN ('pending','confirmed','scheduled','in_progress','completed','cancelled')),
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  updated_at           timestamptz NOT NULL DEFAULT now()
 );
 
--- Enforce collection must be after delivery at the DB level
-alter table public.bookings
-  add constraint bookings_collection_after_delivery
-  check (collection_date > delivery_date);
+-- Indexes for common queries
+CREATE INDEX IF NOT EXISTS bookings_status_idx        ON public.bookings (status);
+CREATE INDEX IF NOT EXISTS bookings_delivery_idx      ON public.bookings (delivery_date);
+CREATE INDEX IF NOT EXISTS bookings_scheduled_date_idx ON public.bookings (scheduled_date);
+CREATE INDEX IF NOT EXISTS bookings_created_idx       ON public.bookings (created_at DESC);
 
--- RLS: public can INSERT (anon), authenticated users can read/update
-alter table public.bookings enable row level security;
+-- Row Level Security
+ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
 
-create policy "Public can create bookings"
-  on public.bookings for insert
-  to anon, authenticated
-  with check (true);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'bookings' AND policyname = 'Public can create bookings') THEN
+    CREATE POLICY "Public can create bookings"
+      ON public.bookings FOR INSERT
+      TO anon, authenticated
+      WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'bookings' AND policyname = 'Authenticated users can view bookings') THEN
+    CREATE POLICY "Authenticated users can view bookings"
+      ON public.bookings FOR SELECT
+      TO authenticated
+      USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'bookings' AND policyname = 'Authenticated users can update bookings') THEN
+    CREATE POLICY "Authenticated users can update bookings"
+      ON public.bookings FOR UPDATE
+      TO authenticated
+      USING (true)
+      WITH CHECK (true);
+  END IF;
+END $$;
 
-create policy "Authenticated users can view bookings"
-  on public.bookings for select
-  to authenticated
-  using (true);
-
-create policy "Authenticated users can update bookings"
-  on public.bookings for update
-  to authenticated
-  using (true);
-
--- updated_at trigger (reuse function if already exists from other tables)
-create or replace function public.handle_bookings_updated_at()
-returns trigger language plpgsql as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
+-- updated_at trigger
+CREATE OR REPLACE FUNCTION public.handle_bookings_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
 $$;
 
-drop trigger if exists bookings_updated_at on public.bookings;
-create trigger bookings_updated_at
-  before update on public.bookings
-  for each row execute function public.handle_bookings_updated_at();
-
--- Indexes for common dashboard queries
-create index if not exists bookings_status_idx    on public.bookings (status);
-create index if not exists bookings_delivery_idx  on public.bookings (delivery_date);
-create index if not exists bookings_created_idx   on public.bookings (created_at desc);
+DROP TRIGGER IF EXISTS bookings_updated_at ON public.bookings;
+CREATE TRIGGER bookings_updated_at
+  BEFORE UPDATE ON public.bookings
+  FOR EACH ROW EXECUTE FUNCTION public.handle_bookings_updated_at();

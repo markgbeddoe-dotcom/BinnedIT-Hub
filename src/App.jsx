@@ -28,6 +28,7 @@ import SettingsPage from './components/SettingsPage';
 import { PrintStyles } from './components/PDFExport';
 import PDFExport from './components/PDFExport';
 import InvestorView from './components/InvestorView';
+import DispatchBoard from './components/DispatchBoard';
 
 // React Query hooks
 import { useAvailableMonths } from './hooks/useMonthData';
@@ -46,8 +47,8 @@ const FALLBACK_MONTHS = [
 ];
 
 const tiles = [
-  { id:"dispatch", icon:"📡", title:"Dispatch", desc:"Real-time job dispatch & route management", sub:"Operations — coming soon", color:B.yellow },
-  { id:"bookings", icon:"📅", title:"Bookings", desc:"Manage bin hire bookings & schedules", sub:"Operations — coming soon", color:B.blue },
+  { id:"dispatch", icon:"🗂️", title:"Dispatch", desc:"Kanban job management & scheduling", sub:"Drag & drop board", color:B.yellow },
+  { id:"bookings", icon:"📅", title:"Bookings", desc:"Manage bin hire bookings & schedules", sub:"Operations", color:B.blue },
   { id:"dashboard", icon:"📊", title:"Financial Reports", desc:"Current month's P&L, KPIs and analysis", sub:"Select month to view", color:B.green },
   { id:"fleet-assets", icon:"🚛", title:"Fleet", desc:"Trucks, bins, maintenance records", sub:"Jake's operations module", color:B.amber },
   { id:"generate", icon:"🔧", title:"Load Data", desc:"12-step guided wizard", sub:"Upload files + manual input", color:B.purple },
@@ -64,7 +65,7 @@ const dashTabs = [
 // Operations-first nav order
 const menuItems = [
   // Operations section
-  {id:'dispatch',icon:'📡',label:'Dispatch',section:'OPERATIONS'},
+  {id:'dispatch',icon:'🗂️',label:'Dispatch',section:'OPERATIONS'},
   {id:'bookings',icon:'📅',label:'Bookings',section:null},
   {id:'fleet-assets',icon:'🚛',label:'Fleet',section:null},
   {id:'drivers',icon:'👷',label:'Drivers',section:null},
@@ -285,6 +286,8 @@ export default function App() {
           <button key={t.id} onClick={() => {
             if (t.id==='dashboard') { navigate('/dashboard/snapshot'); setDashTab('snapshot'); }
             else if (t.id==='generate'||t.id==='update') { navigate('/month-select'); }
+            else if (t.id==='fleet-assets') { navigate('/fleet-assets'); }
+            else if (t.id==='dispatch') { navigate('/dispatch'); }
             else navigate(`/${t.id}`);
           }} style={{background:B.cardBg,border:`1px solid ${B.cardBorder}`,borderRadius:14,padding:'28px 24px',
             cursor:'pointer',textAlign:'left',borderLeft:`4px solid ${t.color}`,display:'flex',flexDirection:'column',gap:6,transition:'all 0.2s'}}
@@ -537,6 +540,7 @@ export default function App() {
         <Route path="/month-select" element={<MonthSelect />} />
         <Route path="/wizard" element={<Wizard onComplete={handleWizardComplete} onHome={goHome} selectedMonth={selectedMonth} />} />
         <Route path="/fleet-assets" element={<FleetAssetsTab />} />
+        <Route path="/dispatch" element={<DispatchBoard />} />
         <Route path="/history" element={<HistoryScreen />} />
         <Route path="/reports" element={<ReportsScreen />} />
         <Route path="/dispatch" element={<ComingSoonPage title="Dispatch" icon="📡" desc="Real-time job dispatch, driver assignment, and route optimisation." />} />
