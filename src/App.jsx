@@ -29,6 +29,7 @@ import { PrintStyles } from './components/PDFExport';
 import PDFExport from './components/PDFExport';
 import InvestorView from './components/InvestorView';
 import DispatchBoard from './components/DispatchBoard';
+import InvoicesPage from './components/InvoicesPage';
 
 // React Query hooks
 import { useAvailableMonths } from './hooks/useMonthData';
@@ -49,7 +50,8 @@ const FALLBACK_MONTHS = [
 const tiles = [
   { id:"dispatch", icon:"🗂️", title:"Dispatch", desc:"Kanban job management & scheduling", sub:"Drag & drop board", color:B.yellow },
   { id:"bookings", icon:"📅", title:"Bookings", desc:"Manage bin hire bookings & schedules", sub:"Operations", color:B.blue },
-  { id:"dashboard", icon:"📊", title:"Financial Reports", desc:"Current month's P&L, KPIs and analysis", sub:"Select month to view", color:B.green },
+  { id:"invoices", icon:"🧾", title:"Invoices", desc:"Auto-generated invoices, payment tracking & chasing", sub:"Finance", color:B.green },
+  { id:"dashboard", icon:"📊", title:"Financial Reports", desc:"Current month's P&L, KPIs and analysis", sub:"Select month to view", color:B.purple },
   { id:"fleet-assets", icon:"🚛", title:"Fleet", desc:"Trucks, bins, maintenance records", sub:"Jake's operations module", color:B.amber },
   { id:"generate", icon:"🔧", title:"Load Data", desc:"12-step guided wizard", sub:"Upload files + manual input", color:B.purple },
   { id:"settings", icon:"⚙️", title:"Settings", desc:"Alert rules, competitors, thresholds", sub:"Configure platform", color:B.textMuted },
@@ -70,6 +72,7 @@ const menuItems = [
   {id:'fleet-assets',icon:'🚛',label:'Fleet',section:null},
   {id:'drivers',icon:'👷',label:'Drivers',section:null},
   {id:'customers',icon:'👥',label:'Customers',section:null},
+  {id:'invoices',icon:'🧾',label:'Invoices',section:null},
   // Reports section
   {id:'dashboard',icon:'📊',label:'Reports',section:'REPORTS'},
   {id:'history',icon:'🗓️',label:'Monthly History',section:null},
@@ -131,6 +134,7 @@ export default function App() {
     : location.pathname === '/bookings' ? 'bookings'
     : location.pathname === '/customers' ? 'customers'
     : location.pathname === '/drivers' ? 'drivers'
+    : location.pathname === '/invoices' ? 'invoices'
     : 'home';
 
   const goHome = () => { navigate('/home'); setMenuOpen(false); };
@@ -545,6 +549,7 @@ export default function App() {
         <Route path="/reports" element={<ReportsScreen />} />
         <Route path="/dispatch" element={<ComingSoonPage title="Dispatch" icon="📡" desc="Real-time job dispatch, driver assignment, and route optimisation." />} />
         <Route path="/bookings" element={<ComingSoonPage title="Bookings" icon="📅" desc="Manage all bin hire bookings, schedule pickups, and track job status." />} />
+        <Route path="/invoices" element={<InvoicesPage />} />
         <Route path="/customers" element={<ComingSoonPage title="Customers" icon="👥" desc="Customer accounts, job history, account balances, and communications." />} />
         <Route path="/drivers" element={<ComingSoonPage title="Drivers" icon="👷" desc="Driver profiles, licences, compliance, and daily job assignments." />} />
         <Route path="/settings" element={<SettingsPage />} />
