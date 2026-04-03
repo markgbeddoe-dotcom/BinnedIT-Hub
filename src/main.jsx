@@ -1,15 +1,21 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import LoginPage from './components/LoginPage'
 import InvestorView from './components/InvestorView'
+import BookingPage from './components/BookingPage'
 import { queryClient } from './hooks/queryClient'
 
 function AuthGate() {
   const { session, loading } = useAuth()
+  const location = useLocation()
+
+  // Public routes — no auth required
+  if (location.pathname === '/book') return <BookingPage />
+
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#D8D5E0', color:'#1A1A1A', fontFamily:'DM Sans, sans-serif', fontSize:16 }}>
       Loading…
