@@ -4,11 +4,13 @@ import { B, fmtFull } from '../../theme';
 import { KPITile, SectionHeader, ChartCard, CustomTooltip } from '../UIComponents';
 import * as D from '../../data/financials';
 import { useAcquisitions } from '../../hooks/useMonthData';
+import { useChurnRisk } from '../../hooks/useChurnRisk';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 export default function BDMTab({ reportId, reportMonth, selectedMonth, monthCount, monthLabel }) {
   const { isMobile } = useBreakpoint();
   const { data: acquisitionRows, isLoading } = useAcquisitions(reportMonth);
+  const { data: churnRisk = D.churnRiskCustomers } = useChurnRisk();
 
   // Use Supabase data if available, else fallback to D.*
   const useSupabase = acquisitionRows && acquisitionRows.length > 0;
@@ -99,6 +101,58 @@ export default function BDMTab({ reportId, reportMonth, selectedMonth, monthCoun
           </div>
         </ChartCard>
       </div>
+
+      {/* ── Churn Risk Alert ──────────────────────────────────────────── */}
+      {churnRisk.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <ChartCard title={`Churn Risk Alert — ${churnRisk.length} Customer${churnRisk.length !== 1 ? 's' : ''} (>40% drop in order frequency)`}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: '#FFF3F3', border: `1px solid ${B.red}`, borderRadius: 6,
+              padding: '8px 12px', marginBottom: 12,
+            }}>
+              <span style={{ fontSize: 16 }}>⚠</span>
+              <span style={{ fontSize: 12, color: B.red, fontWeight: 600 }}>
+                These customers have significantly reduced their order frequency. Follow up to prevent churn.
+              </span>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                <thead>
+                  <tr style={{ borderBottom: `2px solid ${B.cardBorder}` }}>
+                    {['Customer', 'Type', 'Avg (Prior)', 'Avg (Recent)', 'Drop', 'YTD Revenue', 'Last Job'].map(h => (
+                      <th key={h} style={{ padding: '6px 8px', textAlign: 'left', color: B.textMuted, fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {churnRisk.map((c, i) => (
+                    <tr key={i} style={{ borderBottom: `1px solid ${B.cardBorder}`, background: i % 2 === 0 ? 'transparent' : B.bg + '55' }}>
+                      <td style={{ padding: '6px 8px', color: B.textPrimary, fontWeight: 600 }}>{c.name}</td>
+                      <td style={{ padding: '6px 8px', color: B.textSecondary }}>{c.type}</td>
+                      <td style={{ padding: '6px 8px', color: B.textSecondary, textAlign: 'right' }}>{c.avgPrior.toFixed(1)}/mo</td>
+                      <td style={{ padding: '6px 8px', color: B.textSecondary, textAlign: 'right' }}>{c.avgRecent.toFixed(1)}/mo</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                        <span style={{
+                          background: c.drop >= 60 ? B.red : B.orange,
+                          color: '#fff', borderRadius: 4, padding: '2px 6px', fontWeight: 700, fontSize: 10,
+                        }}>
+                          -{c.drop}%
+                        </span>
+                      </td>
+                      <td style={{ padding: '6px 8px', color: B.textSecondary, textAlign: 'right' }}>{fmtFull(c.revenue)}</td>
+                      <td style={{ padding: '6px 8px', color: B.textMuted }}>{c.lastJob}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ marginTop: 10, fontSize: 10, color: B.textMuted }}>
+              Comparison: avg jobs/month over prior 4 months vs recent 2 months. Threshold: ≥40% decline.
+            </div>
+          </ChartCard>
+        </div>
+      )}
     </div>
   );
 }
