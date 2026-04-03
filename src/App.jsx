@@ -28,6 +28,7 @@ import SettingsPage from './components/SettingsPage';
 import { PrintStyles } from './components/PDFExport';
 import PDFExport from './components/PDFExport';
 import InvestorView from './components/InvestorView';
+import DispatchBoard from './components/DispatchBoard';
 
 // React Query hooks
 import { useAvailableMonths } from './hooks/useMonthData';
@@ -51,6 +52,7 @@ const tiles = [
   { id:"update", icon:"📥", title:"Update Existing", desc:"Add latest month's data", sub:"Quick update wizard", color:B.amber },
   { id:"fleet-assets", icon:"🚛", title:"Fleet Assets", desc:"Trucks, bins, maintenance records", sub:"Jake's operations module", color:B.orange },
   { id:"settings", icon:"⚙️", title:"Settings", desc:"Alert rules, competitors, branding", sub:"Configure thresholds", color:B.textSecondary },
+  { id:"dispatch", icon:"🗂️", title:"Dispatch Board", desc:"Kanban job management", sub:"Drag & drop scheduling", color:B.orange },
 ];
 
 const dashTabs = [
@@ -61,8 +63,9 @@ const dashTabs = [
 ];
 
 const menuItems = [
-  {id:'home',icon:'🏠',label:'Home'},{id:'dashboard',icon:'📊',label:'Dashboard'},{id:'history',icon:'📅',label:'Monthly History'},
-  {id:'fleet-assets',icon:'🚛',label:'Fleet Assets'},{id:'reports',icon:'📄',label:'Reports'},{id:'settings',icon:'⚙️',label:'Settings'},{id:'about',icon:'ℹ️',label:'About'},
+  {id:'home',icon:'🏠',label:'Home'},{id:'dashboard',icon:'📊',label:'Dashboard'},{id:'dispatch',icon:'🗂️',label:'Dispatch Board'},
+  {id:'history',icon:'📅',label:'Monthly History'},{id:'fleet-assets',icon:'🚛',label:'Fleet Assets'},
+  {id:'reports',icon:'📄',label:'Reports'},{id:'settings',icon:'⚙️',label:'Settings'},{id:'about',icon:'ℹ️',label:'About'},
 ];
 
 // Main app wrapper that handles state and routing
@@ -270,6 +273,7 @@ export default function App() {
             if (t.id==='dashboard') { navigate('/dashboard/snapshot'); setDashTab('snapshot'); }
             else if (t.id==='generate'||t.id==='update') { navigate('/month-select'); }
             else if (t.id==='fleet-assets') { navigate('/fleet-assets'); }
+            else if (t.id==='dispatch') { navigate('/dispatch'); }
             else navigate(`/${t.id}`);
           }} style={{background:B.cardBg,border:`1px solid ${B.cardBorder}`,borderRadius:14,padding:'28px 24px',
             cursor:'pointer',textAlign:'left',borderLeft:`4px solid ${t.color}`,display:'flex',flexDirection:'column',gap:6,transition:'all 0.2s'}}
@@ -505,6 +509,7 @@ export default function App() {
         <Route path="/month-select" element={<MonthSelect />} />
         <Route path="/wizard" element={<Wizard onComplete={handleWizardComplete} onHome={goHome} selectedMonth={selectedMonth} />} />
         <Route path="/fleet-assets" element={<FleetAssetsTab />} />
+        <Route path="/dispatch" element={<DispatchBoard />} />
         <Route path="/history" element={<HistoryScreen />} />
         <Route path="/reports" element={<ReportsScreen />} />
         <Route path="/settings" element={<SettingsPage />} />
