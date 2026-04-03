@@ -120,6 +120,11 @@ export default function Wizard({ onComplete, onHome, selectedMonth }) {
   const [cEpaRenewal, setCEpaRenewal] = useState('');
   const [cInsurance, setCInsurance] = useState('');
 
+  // ESG / Waste Diversion state
+  const [esgLandfill, setEsgLandfill] = useState('');
+  const [esgRecycled, setEsgRecycled] = useState('');
+  const [esgDiverted, setEsgDiverted] = useState('');
+
   // Market state — individual pieces
   const [mOutlook, setMOutlook] = useState('normal');
   const [mKeyWins, setMKeyWins] = useState('');
@@ -363,6 +368,41 @@ export default function Wizard({ onComplete, onHome, selectedMonth }) {
               </FormField>}
             </SectionBox>
 
+            <SectionBox title="ESG — Waste Diversion" color={B.teal}>
+              <FormField label="Tonnes to landfill this month">
+                <input type="text" inputMode="decimal" value={esgLandfill} onChange={e => setEsgLandfill(e.target.value)} placeholder="e.g. 12.5" style={{ ...inputStyle, width: 160 }} />
+              </FormField>
+              <FormField label="Tonnes recycled / diverted from landfill">
+                <input type="text" inputMode="decimal" value={esgRecycled} onChange={e => setEsgRecycled(e.target.value)} placeholder="e.g. 8.2" style={{ ...inputStyle, width: 160 }} />
+              </FormField>
+              <FormField label="Total tonnes diverted (incl. reuse, repurpose)">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input type="text" inputMode="decimal" value={esgDiverted} onChange={e => setEsgDiverted(e.target.value)} placeholder="e.g. 9.0" style={{ ...inputStyle, width: 160 }} />
+                  {esgRecycled && !esgDiverted && (
+                    <span style={{ fontSize: 11, color: B.teal, fontWeight: 600 }}>Tip: can equal recycled if no other diversion</span>
+                  )}
+                </div>
+              </FormField>
+              {(esgLandfill || esgDiverted) && (() => {
+                const lf = parseFloat(esgLandfill) || 0;
+                const dv = parseFloat(esgDiverted) || parseFloat(esgRecycled) || 0;
+                const total = lf + dv;
+                const rate = total > 0 ? Math.round(dv / total * 1000) / 10 : 0;
+                return (
+                  <div style={{ background: B.bg, borderRadius: 8, padding: 12, display: 'flex', gap: 16 }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 10, color: B.textMuted, textTransform: 'uppercase' }}>Diversion Rate</div>
+                      <div style={{ fontFamily: fontHead, fontSize: 22, color: rate >= 50 ? B.green : B.amber, fontWeight: 700 }}>{rate}%</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 10, color: B.textMuted, textTransform: 'uppercase' }}>Total Waste</div>
+                      <div style={{ fontFamily: fontHead, fontSize: 22, color: B.textPrimary, fontWeight: 700 }}>{total.toFixed(1)}t</div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </SectionBox>
+
             <SectionBox title="Vehicles, Insurance & EPA" color={B.blue}>
               <FormField label="Vehicle registrations due in 90 days">
                 <textarea value={cVehicleRegos} onChange={e => setCVehicleRegos(e.target.value)} placeholder={"Vehicle/Rego | Due date\ne.g. Hino 500 XYZ123 | 15/04/2026"} rows={2} style={monoStyle} />
@@ -455,7 +495,7 @@ export default function Wizard({ onComplete, onHome, selectedMonth }) {
                 </div>
               ))}
             </div>
-            <button type="button" onClick={() => onComplete({ files, parsed, selectedMonth, bankBalance, quality: { unreconciledCount: qUnreconciledCount, unreconciledValue: qUnreconciledValue, bankRecStatus: qBankRecStatus, plStatus: qPlStatus, missingInvoices: qMissingInvoices }, compliance: { whsIncidents: cWhsIncidents, whsDetails: cWhsDetails, nearMiss: cNearMiss, nearMissDetails: cNearMissDetails, whsRegister: cWhsRegister, lastToolbox: cLastToolbox, trainingRows: cTrainingRows, certExpiring: cCertExpiring, certExpired: cCertExpired, newStaff: cNewStaff, trainingRegister: cTrainingRegister, asbJobs: cAsbJobs, asbDocs: cAsbDocs, asbClearance: cAsbClearance, asbComplaints: cAsbComplaints, asbComplaintDetails: cAsbComplaintDetails, vehiclesOffRoad: cVehiclesOffRoad, vehiclesOffRoadReason: cVehiclesOffRoadReason, vehicleRegos: cVehicleRegos, fleetInspections: cFleetInspections, epaStatus: cEpaStatus, epaRenewal: cEpaRenewal, insurance: cInsurance }, market: { outlook: mOutlook, keyWins: mKeyWins, keyRisks: mKeyRisks, referralSources: mReferralSources, customersAtRisk: mCustomersAtRisk, paymentsExpected: mPaymentsExpected, billsDue: mBillsDue } })}
+            <button type="button" onClick={() => onComplete({ files, parsed, selectedMonth, bankBalance, quality: { unreconciledCount: qUnreconciledCount, unreconciledValue: qUnreconciledValue, bankRecStatus: qBankRecStatus, plStatus: qPlStatus, missingInvoices: qMissingInvoices }, compliance: { whsIncidents: cWhsIncidents, whsDetails: cWhsDetails, nearMiss: cNearMiss, nearMissDetails: cNearMissDetails, whsRegister: cWhsRegister, lastToolbox: cLastToolbox, trainingRows: cTrainingRows, certExpiring: cCertExpiring, certExpired: cCertExpired, newStaff: cNewStaff, trainingRegister: cTrainingRegister, asbJobs: cAsbJobs, asbDocs: cAsbDocs, asbClearance: cAsbClearance, asbComplaints: cAsbComplaints, asbComplaintDetails: cAsbComplaintDetails, vehiclesOffRoad: cVehiclesOffRoad, vehiclesOffRoadReason: cVehiclesOffRoadReason, vehicleRegos: cVehicleRegos, fleetInspections: cFleetInspections, epaStatus: cEpaStatus, epaRenewal: cEpaRenewal, insurance: cInsurance }, market: { outlook: mOutlook, keyWins: mKeyWins, keyRisks: mKeyRisks, referralSources: mReferralSources, customersAtRisk: mCustomersAtRisk, paymentsExpected: mPaymentsExpected, billsDue: mBillsDue }, esg: { landfill: esgLandfill, recycled: esgRecycled, diverted: esgDiverted } })}
               style={{ width: '100%', background: B.green, color: B.white, border: 'none', padding: 14, borderRadius: 8, fontFamily: fontHead, fontSize: 16, fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase' }}>
               ✓ Generate Dashboard
             </button>
@@ -482,7 +522,7 @@ export default function Wizard({ onComplete, onHome, selectedMonth }) {
         {step < wizardSteps.length - 1 ?
           <button type="button" onClick={() => setStep(step + 1)}
             style={{ background: pc[ws.part], color: B.black, border: 'none', padding: '10px 24px', borderRadius: 8, cursor: 'pointer', fontFamily: fontHead, fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>Next Step →</button>
-          : <button type="button" onClick={() => onComplete({ files, parsed, selectedMonth, bankBalance, quality: { unreconciledCount: qUnreconciledCount, unreconciledValue: qUnreconciledValue, bankRecStatus: qBankRecStatus, plStatus: qPlStatus, missingInvoices: qMissingInvoices }, compliance: { whsIncidents: cWhsIncidents, whsDetails: cWhsDetails, nearMiss: cNearMiss, nearMissDetails: cNearMissDetails, whsRegister: cWhsRegister, lastToolbox: cLastToolbox, trainingRows: cTrainingRows, certExpiring: cCertExpiring, certExpired: cCertExpired, newStaff: cNewStaff, trainingRegister: cTrainingRegister, asbJobs: cAsbJobs, asbDocs: cAsbDocs, asbClearance: cAsbClearance, asbComplaints: cAsbComplaints, asbComplaintDetails: cAsbComplaintDetails, vehiclesOffRoad: cVehiclesOffRoad, vehiclesOffRoadReason: cVehiclesOffRoadReason, vehicleRegos: cVehicleRegos, fleetInspections: cFleetInspections, epaStatus: cEpaStatus, epaRenewal: cEpaRenewal, insurance: cInsurance }, market: { outlook: mOutlook, keyWins: mKeyWins, keyRisks: mKeyRisks, referralSources: mReferralSources, customersAtRisk: mCustomersAtRisk, paymentsExpected: mPaymentsExpected, billsDue: mBillsDue } })}
+          : <button type="button" onClick={() => onComplete({ files, parsed, selectedMonth, bankBalance, quality: { unreconciledCount: qUnreconciledCount, unreconciledValue: qUnreconciledValue, bankRecStatus: qBankRecStatus, plStatus: qPlStatus, missingInvoices: qMissingInvoices }, compliance: { whsIncidents: cWhsIncidents, whsDetails: cWhsDetails, nearMiss: cNearMiss, nearMissDetails: cNearMissDetails, whsRegister: cWhsRegister, lastToolbox: cLastToolbox, trainingRows: cTrainingRows, certExpiring: cCertExpiring, certExpired: cCertExpired, newStaff: cNewStaff, trainingRegister: cTrainingRegister, asbJobs: cAsbJobs, asbDocs: cAsbDocs, asbClearance: cAsbClearance, asbComplaints: cAsbComplaints, asbComplaintDetails: cAsbComplaintDetails, vehiclesOffRoad: cVehiclesOffRoad, vehiclesOffRoadReason: cVehiclesOffRoadReason, vehicleRegos: cVehicleRegos, fleetInspections: cFleetInspections, epaStatus: cEpaStatus, epaRenewal: cEpaRenewal, insurance: cInsurance }, market: { outlook: mOutlook, keyWins: mKeyWins, keyRisks: mKeyRisks, referralSources: mReferralSources, customersAtRisk: mCustomersAtRisk, paymentsExpected: mPaymentsExpected, billsDue: mBillsDue }, esg: { landfill: esgLandfill, recycled: esgRecycled, diverted: esgDiverted } })}
             style={{ background: B.green, color: B.white, border: 'none', padding: '10px 24px', borderRadius: 8, cursor: 'pointer', fontFamily: fontHead, fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>✓ View Dashboard</button>
         }
       </div>

@@ -259,6 +259,61 @@ export default function SnapshotTab({ reportId, reportMonth, selectedMonth, mont
         <KPITile label="Fixed Assets" value={fmtFull(bsFixedAssets)} sub="Trucks, bins, equipment" status="green" />
         <KPITile label="Current Year Earnings" value={fmtFull(bsCurrentYearEarnings)} status={bsCurrentYearEarnings > 0 ? 'green' : 'red'} />
       </div>
+      {/* ESG / Waste Diversion Widget */}
+      {(() => {
+        const lf = financials?.tonnes_landfill ?? null;
+        const dv = financials?.tonnes_diverted ?? financials?.tonnes_recycled ?? null;
+        const rc = financials?.tonnes_recycled ?? null;
+        if (lf === null && dv === null) return null;
+        const total = (lf || 0) + (dv || 0);
+        const rate = total > 0 ? Math.round((dv || 0) / total * 1000) / 10 : 0;
+
+        // YTD diverted from all months
+        const ytdDiverted = ytdRows
+          ? ytdRows.reduce((s, r) => s + (r.tonnes_diverted || r.tonnes_recycled || 0), 0)
+          : dv || 0;
+
+        // Trend: compare last two months if available
+        let trendIcon = null;
+        if (ytdRows && ytdRows.length >= 2) {
+          const prev = ytdRows[ytdRows.length - 2];
+          const prevTotal = (prev.tonnes_landfill || 0) + (prev.tonnes_diverted || prev.tonnes_recycled || 0);
+          const prevRate = prevTotal > 0 ? (prev.tonnes_diverted || prev.tonnes_recycled || 0) / prevTotal * 100 : 0;
+          if (rate > prevRate + 1) trendIcon = <span style={{ color: B.green, fontWeight: 700 }}>↑ improving</span>;
+          else if (rate < prevRate - 1) trendIcon = <span style={{ color: B.red, fontWeight: 700 }}>↓ declining</span>;
+          else trendIcon = <span style={{ color: B.textMuted }}>→ stable</span>;
+        }
+
+        return (
+          <div style={{ marginTop: 20, marginBottom: 12 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: B.textPrimary, margin: '0 0 4px', fontFamily: fontHead, textTransform: 'uppercase' }}>ESG — Waste Diversion</h3>
+            <p style={{ fontSize: 12, color: B.textSecondary, margin: '0 0 10px' }}>Landfill diversion tracking for {monthLabel}</p>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12 }}>
+              <div style={{ background: B.cardBg, borderRadius: 10, padding: '14px 16px', border: `1px solid ${B.cardBorder}`, borderTop: `3px solid ${B.teal}` }}>
+                <div style={{ fontSize: 10, color: B.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>Diversion Rate</div>
+                <div style={{ fontFamily: fontHead, fontSize: 26, fontWeight: 700, color: rate >= 50 ? B.green : B.amber }}>{rate}%</div>
+                <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 4 }}>{trendIcon}</div>
+              </div>
+              <div style={{ background: B.cardBg, borderRadius: 10, padding: '14px 16px', border: `1px solid ${B.cardBorder}`, borderTop: `3px solid ${B.green}` }}>
+                <div style={{ fontSize: 10, color: B.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>Tonnes Diverted</div>
+                <div style={{ fontFamily: fontHead, fontSize: 26, fontWeight: 700, color: B.green }}>{(dv || 0).toFixed(1)}t</div>
+                <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 4 }}>this month</div>
+              </div>
+              <div style={{ background: B.cardBg, borderRadius: 10, padding: '14px 16px', border: `1px solid ${B.cardBorder}`, borderTop: `3px solid ${B.red}` }}>
+                <div style={{ fontSize: 10, color: B.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>Tonnes to Landfill</div>
+                <div style={{ fontFamily: fontHead, fontSize: 26, fontWeight: 700, color: B.red }}>{(lf || 0).toFixed(1)}t</div>
+                <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 4 }}>this month</div>
+              </div>
+              <div style={{ background: B.cardBg, borderRadius: 10, padding: '14px 16px', border: `1px solid ${B.cardBorder}`, borderTop: `3px solid ${B.cyan}` }}>
+                <div style={{ fontSize: 10, color: B.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>YTD Diverted</div>
+                <div style={{ fontFamily: fontHead, fontSize: 26, fontWeight: 700, color: B.cyan }}>{ytdDiverted.toFixed(1)}t</div>
+                <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 4 }}>{monthCount} months</div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <AIInsightsPanel
         tabName="Business Snapshot"
         contextSummary={snapshotContext}
