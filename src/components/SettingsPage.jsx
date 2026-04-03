@@ -111,8 +111,7 @@ export default function SettingsPage() {
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') { setPushStatus('denied'); return; }
       const reg = await navigator.serviceWorker.ready;
-      // Use a placeholder VAPID key — replace with real key in production
-      const VAPID_PUBLIC_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
+      const VAPID_PUBLIC_KEY = 'BPWT94BxZrM4pGHsPbMwcNp7Ng8kFS93dh7V4Ran8MYRyv79saSsG8H8nk-W5l-reSzMmSpYmrq-yGOtO-vIXwo';
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: VAPID_PUBLIC_KEY,
