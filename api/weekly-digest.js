@@ -17,7 +17,7 @@ export const config = { runtime: 'edge' }
 const RESEND_API = 'https://api.resend.com/emails'
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
 const DIGEST_TO = 'mark@binnedit.com.au'
-const FROM_EMAIL = 'Binned-IT Hub <digest@binnedit.com.au>'
+const FROM_EMAIL = 'SkipSync <digest@binnedit.com.au>'
 
 async function fetchJson(url, headers) {
   const res = await fetch(url, { headers })
@@ -138,7 +138,7 @@ export default async function handler(req) {
         max_tokens: 800,
         messages: [{
           role: 'user',
-          content: `You are preparing a weekly business digest for Mark Beddoe, owner of Binned-IT Pty Ltd (skip bin hire, Seaford Melbourne).
+          content: `You are preparing a weekly business digest for Mark Beddoe, owner of Binned-IT Pty Ltd operating via SkipSync (skip bin hire, Seaford Melbourne).
 
 ${contextLines}
 
@@ -169,9 +169,9 @@ Keep it under 250 words. Be direct and practical — Mark is busy.`,
 <html>
 <body style="font-family:Arial,sans-serif;color:#333;max-width:640px;margin:0 auto;padding:20px;background:#f5f5f5">
   <div style="background:#000;padding:20px 24px;border-radius:8px 8px 0 0;display:flex;align-items:center;gap:16px">
-    <img src="https://binnedit-hub.vercel.app/logo.jpg" alt="Binned-IT" style="height:40px;border-radius:4px" />
+    <img src="https://binnedit-hub.vercel.app/logo.jpg" alt="SkipSync" style="height:40px;border-radius:4px" />
     <div>
-      <div style="color:#fff;font-size:16px;font-weight:700">Binned-IT Weekly Digest</div>
+      <div style="color:#EFDF0F;font-size:16px;font-weight:700">SkipSync Weekly Digest</div>
       <div style="color:#aaa;font-size:12px">${today.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
     </div>
   </div>
@@ -231,7 +231,7 @@ Keep it under 250 words. Be direct and practical — Mark is busy.`,
     </div>` : ''}
 
     <div style="margin-top:24px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center">
-      <a href="https://binnedit-hub.vercel.app" style="color:#7B8FD4">Open Dashboard</a> ·
+      <a href="https://binnedit-hub.vercel.app" style="color:#EFDF0F">Open SkipSync</a> ·
       Binned-IT Pty Ltd · Seaford, Melbourne · Auto-generated weekly digest
     </div>
   </div>
@@ -248,7 +248,7 @@ Keep it under 250 words. Be direct and practical — Mark is busy.`,
     body: JSON.stringify({
       from: FROM_EMAIL,
       to: [DIGEST_TO],
-      subject: `Binned-IT Weekly Digest — ${today.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`,
+      subject: `SkipSync Weekly Digest — ${today.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`,
       html,
     }),
   })

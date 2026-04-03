@@ -7,7 +7,7 @@
  * Proxies chat requests to the Anthropic Claude API.
  *
  * Security: The ANTHROPIC_API_KEY is never exposed to the browser.
- * All requests must come from the authenticated Binned-IT SPA.
+ * All requests must come from the authenticated SkipSync SPA.
  *
  * Rate limiting: 50 messages/user/day via ai_chat_sessions table.
  * If SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY are not set, rate
@@ -164,7 +164,7 @@ FINANCIAL DATA FOR ${reportMonth}:
     }
   }
 
-  const systemPrompt = `You are a financial business assistant for Binned-IT Pty Ltd, a skip bin hire business based in Seaford, Melbourne, Australia. The business operates in the waste management industry.
+  const systemPrompt = `You are a financial business assistant for Binned-IT Pty Ltd (operating via SkipSync), a skip bin hire business based in Seaford, Melbourne, Australia. The business operates in the waste management industry.
 
 Key business facts:
 - Skip bin hire for domestic, commercial, and industrial customers

@@ -96,7 +96,7 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'subscription.endpoint required' }), { status: 400 })
   }
 
-  const payload = JSON.stringify({ title: title || 'Binned-IT Alert', body: pushBody || '', url: url || '/' })
+  const payload = JSON.stringify({ title: title || 'SkipSync Alert', body: pushBody || '', url: url || '/' })
   const endpoint = subscription.endpoint
   const audience = new URL(endpoint).origin
 

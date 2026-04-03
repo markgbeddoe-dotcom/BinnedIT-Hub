@@ -1,4 +1,4 @@
-// ===== BINNED-IT FINANCIAL DATA — FY2026 YTD (Jul 2025 – Feb 2026) =====
+// ===== SKIPSYNC / BINNED-IT PTY LTD — FINANCIAL DATA FY2026 YTD (Jul 2025 – Feb 2026) =====
 
 export const months = ["Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb"];
 

@@ -1,7 +1,7 @@
-// Binned-IT Dashboard Hub — Service Worker
+// SkipSync — Service Worker
 // Provides offline capability and PWA support
 
-const CACHE_NAME = 'binnedit-v2-2';
+const CACHE_NAME = 'skipsync-v2-2';
 const OFFLINE_URL = '/';
 
 // Assets to cache on install
@@ -75,7 +75,7 @@ self.addEventListener('fetch', (event) => {
 // Push notification support
 self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : {};
-  const title = data.title || 'Binned-IT Alert';
+  const title = data.title || 'SkipSync Alert';
   const options = {
     body: data.body || 'You have a new notification.',
     icon: '/logo.jpg',

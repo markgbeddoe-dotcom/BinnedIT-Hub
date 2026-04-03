@@ -9,13 +9,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
 
   const brand = {
-    black: '#000000',
-    yellow: '#F5C518',
+    black: '#000006',
+    yellow: '#EFDF0F',
     white: '#FFFFFF',
-    gray: '#F4F4F6',
-    border: '#E0DDE8',
-    text: '#1A1A2E',
-    muted: '#6B6B80',
+    gray: '#F2F6F4',
+    border: '#D8DDD9',
+    text: '#000006',
+    muted: '#6B7280',
   }
 
   async function handleSubmit(e) {
@@ -40,15 +40,15 @@ export default function LoginPage() {
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <img
             src="/logo.jpg"
-            alt="Binned-IT"
+            alt="SkipSync"
             style={{ height: 56, objectFit: 'contain', marginBottom: 16 }}
             onError={e => { e.target.style.display = 'none' }}
           />
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'Oswald, sans-serif', color: brand.text }}>
-            Dashboard Hub
+            SkipSync
           </div>
           <div style={{ fontSize: 13, color: brand.muted, marginTop: 4 }}>
-            Management Intelligence Platform
+            Operations Intelligence Platform
           </div>
         </div>
 
@@ -114,7 +114,7 @@ export default function LoginPage() {
         </form>
 
         <div style={{ textAlign: 'center', marginTop: 24, fontSize: 12, color: brand.muted }}>
-          Binned-IT Pty Ltd — Seaford, Melbourne
+          SkipSync · Binned-IT Pty Ltd — Seaford, Melbourne
         </div>
       </div>
     </div>

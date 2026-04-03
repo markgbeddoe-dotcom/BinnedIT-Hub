@@ -148,7 +148,7 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
         <div style={{ position: 'fixed', bottom: isMobile ? 68 : 90, right: isMobile ? 0 : 24, left: isMobile ? 0 : 'auto', width: isMobile ? '100%' : 380, maxWidth: isMobile ? '100%' : 'calc(100vw - 48px)', height: isMobile ? 'calc(100vh - 68px - 56px)' : 520, maxHeight: isMobile ? 'calc(100vh - 68px - 56px)' : '65vh', background: B.cardBg, borderRadius: isMobile ? '14px 14px 0 0' : 14, boxShadow: '0 8px 32px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', zIndex: 150, overflow: 'hidden', border: `1px solid ${B.cardBorder}` }}>
           {/* Header */}
           <div style={{ background: '#000', padding: '14px 16px', borderBottom: `2px solid ${B.yellow}` }}>
-            <div style={{ fontFamily: fontHead, fontSize: 14, fontWeight: 700, color: '#fff', textTransform: 'uppercase' }}>Binned-IT Assistant</div>
+            <div style={{ fontFamily: fontHead, fontSize: 14, fontWeight: 700, color: B.yellow, textTransform: 'uppercase' }}>SkipSync Assistant</div>
             <div style={{ fontSize: 10, color: '#888' }}>Powered by Claude · {selLabel || 'Feb 2026'}</div>
           </div>
 

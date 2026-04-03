@@ -17,7 +17,7 @@
 export const config = { runtime: 'edge' }
 
 const RESEND_API = 'https://api.resend.com/emails'
-const FROM_EMAIL = 'Binned-IT Accounts <accounts@binnedit.com.au>'
+const FROM_EMAIL = 'SkipSync Accounts <accounts@binnedit.com.au>'
 const OWNER_EMAIL = 'mark@binnedit.com.au'
 const BUSINESS_NAME = 'Binned-IT Pty Ltd'
 
@@ -39,7 +39,7 @@ function reminder7DayHtml(customerName, amount, ownerEmail) {
   return `<!DOCTYPE html>
 <html>
 <body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
-  <img src="https://binnedit-hub.vercel.app/logo.jpg" alt="Binned-IT" style="height:50px;margin-bottom:20px" />
+  <img src="https://binnedit-hub.vercel.app/logo.jpg" alt="SkipSync" style="height:50px;margin-bottom:20px" />
   <h2 style="color:#2D2640">Friendly Payment Reminder</h2>
   <p>Dear ${customerName},</p>
   <p>We hope you're well. This is a friendly reminder that you have an outstanding invoice balance of
@@ -61,7 +61,7 @@ function reminder14DayHtml(customerName, amount, ownerEmail) {
   return `<!DOCTYPE html>
 <html>
 <body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
-  <img src="https://binnedit-hub.vercel.app/logo.jpg" alt="Binned-IT" style="height:50px;margin-bottom:20px" />
+  <img src="https://binnedit-hub.vercel.app/logo.jpg" alt="SkipSync" style="height:50px;margin-bottom:20px" />
   <h2 style="color:#C96B6B">Payment Follow-Up — Action Required</h2>
   <p>Dear ${customerName},</p>
   <p>We previously sent a payment reminder and note that your account balance of
@@ -83,7 +83,7 @@ function reminder30DayHtml(customerName, amount, ownerEmail) {
   return `<!DOCTYPE html>
 <html>
 <body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
-  <img src="https://binnedit-hub.vercel.app/logo.jpg" alt="Binned-IT" style="height:50px;margin-bottom:20px" />
+  <img src="https://binnedit-hub.vercel.app/logo.jpg" alt="SkipSync" style="height:50px;margin-bottom:20px" />
   <h2 style="color:#C96B6B">FINAL NOTICE — Overdue Account</h2>
   <p>Dear ${customerName},</p>
   <p>Despite previous reminders, your account balance of

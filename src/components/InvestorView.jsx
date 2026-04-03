@@ -51,9 +51,9 @@ export default function InvestorView() {
       {/* Header */}
       <div style={{ background: '#000', borderBottom: `3px solid ${B.yellow}`, padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <img src="/logo.jpg" alt="Binned-IT" style={{ height: 38, borderRadius: 4 }} onError={e => { e.target.style.display = 'none'; }} />
+          <img src="/logo.jpg" alt="SkipSync" style={{ height: 38, borderRadius: 4 }} onError={e => { e.target.style.display = 'none'; }} />
           <div>
-            <div style={{ fontFamily: fontHead, fontSize: 18, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#fff' }}>Binned-IT Dashboard Hub</div>
+            <div style={{ fontFamily: fontHead, fontSize: 18, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: B.yellow }}>SkipSync</div>
             <div style={{ fontSize: 11, color: '#888' }}>Investor View — Read Only</div>
           </div>
         </div>
@@ -66,7 +66,7 @@ export default function InvestorView() {
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px' }}>
         <SectionHeader
           title="FY2026 Business Performance Summary"
-          subtitle={`Jul 2025 — ${currentMonth} | ${monthCount} months YTD | Binned-IT Pty Ltd, Seaford VIC`}
+          subtitle={`Jul 2025 — ${currentMonth} | ${monthCount} months YTD | Binned-IT Pty Ltd (SkipSync), Seaford VIC`}
         />
 
         {/* Read-only notice */}
@@ -136,7 +136,7 @@ export default function InvestorView() {
 
         {/* Footer */}
         <div style={{ marginTop: 40, paddingTop: 20, borderTop: `1px solid ${B.cardBorder}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: 11, color: B.textMuted }}>Binned-IT Pty Ltd — Confidential Investor Report</div>
+          <div style={{ fontSize: 11, color: B.textMuted }}>SkipSync · Binned-IT Pty Ltd — Confidential Investor Report</div>
           <div style={{ fontSize: 11, color: B.textMuted }}>Data as at {currentMonth} | Generated {new Date().toLocaleDateString('en-AU')}</div>
         </div>
       </div>

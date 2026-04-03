@@ -46,11 +46,12 @@ const FALLBACK_MONTHS = [
 ];
 
 const tiles = [
-  { id:"dashboard", icon:"📊", title:"View Dashboard", desc:"Current month's data with analysis", sub:"Select month to view", color:B.yellow },
-  { id:"generate", icon:"🔧", title:"Generate New", desc:"12-step guided wizard", sub:"Upload files + manual input", color:B.green },
-  { id:"update", icon:"📥", title:"Update Existing", desc:"Add latest month's data", sub:"Quick update wizard", color:B.amber },
-  { id:"fleet-assets", icon:"🚛", title:"Fleet Assets", desc:"Trucks, bins, maintenance records", sub:"Jake's operations module", color:B.orange },
-  { id:"settings", icon:"⚙️", title:"Settings", desc:"Alert rules, competitors, branding", sub:"Configure thresholds", color:B.textSecondary },
+  { id:"dispatch", icon:"📡", title:"Dispatch", desc:"Real-time job dispatch & route management", sub:"Operations — coming soon", color:B.yellow },
+  { id:"bookings", icon:"📅", title:"Bookings", desc:"Manage bin hire bookings & schedules", sub:"Operations — coming soon", color:B.blue },
+  { id:"dashboard", icon:"📊", title:"Financial Reports", desc:"Current month's P&L, KPIs and analysis", sub:"Select month to view", color:B.green },
+  { id:"fleet-assets", icon:"🚛", title:"Fleet", desc:"Trucks, bins, maintenance records", sub:"Jake's operations module", color:B.amber },
+  { id:"generate", icon:"🔧", title:"Load Data", desc:"12-step guided wizard", sub:"Upload files + manual input", color:B.purple },
+  { id:"settings", icon:"⚙️", title:"Settings", desc:"Alert rules, competitors, thresholds", sub:"Configure platform", color:B.textMuted },
 ];
 
 const dashTabs = [
@@ -60,9 +61,20 @@ const dashTabs = [
   {id:"risk",label:"RISK / EPA"},{id:"workplan",label:"WORK PLAN"},
 ];
 
+// Operations-first nav order
 const menuItems = [
-  {id:'home',icon:'🏠',label:'Home'},{id:'dashboard',icon:'📊',label:'Dashboard'},{id:'history',icon:'📅',label:'Monthly History'},
-  {id:'fleet-assets',icon:'🚛',label:'Fleet Assets'},{id:'reports',icon:'📄',label:'Reports'},{id:'settings',icon:'⚙️',label:'Settings'},{id:'about',icon:'ℹ️',label:'About'},
+  // Operations section
+  {id:'dispatch',icon:'📡',label:'Dispatch',section:'OPERATIONS'},
+  {id:'bookings',icon:'📅',label:'Bookings',section:null},
+  {id:'fleet-assets',icon:'🚛',label:'Fleet',section:null},
+  {id:'drivers',icon:'👷',label:'Drivers',section:null},
+  {id:'customers',icon:'👥',label:'Customers',section:null},
+  // Reports section
+  {id:'dashboard',icon:'📊',label:'Reports',section:'REPORTS'},
+  {id:'history',icon:'🗓️',label:'Monthly History',section:null},
+  // System
+  {id:'settings',icon:'⚙️',label:'Settings',section:'SYSTEM'},
+  {id:'about',icon:'ℹ️',label:'About',section:null},
 ];
 
 // Main app wrapper that handles state and routing
@@ -76,7 +88,7 @@ export default function App() {
   const [wizardData, setWizardData] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [wpDone, setWpDone] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('binnedit_wp_done') || '{}'); } catch { return {}; }
+    try { return JSON.parse(localStorage.getItem('skipsync_wp_done') || '{}'); } catch { return {}; }
   });
 
   const { isMobile } = useBreakpoint();
@@ -114,6 +126,10 @@ export default function App() {
     : location.pathname === '/history' ? 'history'
     : location.pathname === '/reports' ? 'reports'
     : location.pathname === '/about' ? 'about'
+    : location.pathname === '/dispatch' ? 'dispatch'
+    : location.pathname === '/bookings' ? 'bookings'
+    : location.pathname === '/customers' ? 'customers'
+    : location.pathname === '/drivers' ? 'drivers'
     : 'home';
 
   const goHome = () => { navigate('/home'); setMenuOpen(false); };
@@ -219,7 +235,7 @@ export default function App() {
   const toggleDone = (id) => {
     setWpDone(prev => {
       const next = { ...prev, [id]: prev[id] ? null : { by: 'Mark', at: new Date().toISOString() } };
-      localStorage.setItem('binnedit_wp_done', JSON.stringify(next));
+      localStorage.setItem('skipsync_wp_done', JSON.stringify(next));
       return next;
     });
   };
@@ -233,10 +249,10 @@ export default function App() {
       minHeight: isMobile ? 56 : 70,
     }} className="no-print">
       <button onClick={()=>setMenuOpen(!menuOpen)} style={{background:'none',border:'none',color:'#fff',fontSize: isMobile ? 20 : 22,cursor:'pointer',padding:'2px 6px',lineHeight:1}}>☰</button>
-      <img src="/logo.jpg" alt="Binned-IT" style={{height: isMobile ? 28 : 38,borderRadius:4}} onError={e=>{e.target.style.display='none'}} />
+      <img src="/logo.jpg" alt="SkipSync" style={{height: isMobile ? 28 : 38,borderRadius:4}} onError={e=>{e.target.style.display='none'}} />
       <div style={{flex:1, minWidth:0}}>
-        <div style={{fontFamily:fontHead,fontSize: isMobile ? 13 : 16,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:'#fff', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>Dashboard Hub</div>
-        {!isMobile && <div style={{fontSize:11,color:'#888'}}>Management Intelligence Platform &middot; v{VERSION}</div>}
+        <div style={{fontFamily:fontHead,fontSize: isMobile ? 13 : 16,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:B.yellow, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>SkipSync</div>
+        {!isMobile && <div style={{fontSize:11,color:'#888'}}>Operations Intelligence Platform &middot; v{VERSION}</div>}
       </div>
       {currentScreen==='dashboard' && !isMobile && (
         <div style={{background:'#222',borderRadius:6,padding:'4px 8px',display:'flex',alignItems:'center',gap:6}}>
@@ -264,12 +280,11 @@ export default function App() {
         <h1 style={{fontFamily:fontHead,fontSize:28,fontWeight:700,color:B.textPrimary,margin:0,letterSpacing:'0.04em'}}>Welcome back, Mark</h1>
         <p style={{color:B.textMuted,fontSize:14,marginTop:8}}>Data: Jul 2025 – {selLabel} ({monthCount} month{monthCount>1?'s':''}) &nbsp;|&nbsp; Last updated: {selLabel}</p>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:16}}>
+      <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(3,1fr)',gap:16}}>
         {tiles.map(t => (
           <button key={t.id} onClick={() => {
             if (t.id==='dashboard') { navigate('/dashboard/snapshot'); setDashTab('snapshot'); }
             else if (t.id==='generate'||t.id==='update') { navigate('/month-select'); }
-            else if (t.id==='fleet-assets') { navigate('/fleet-assets'); }
             else navigate(`/${t.id}`);
           }} style={{background:B.cardBg,border:`1px solid ${B.cardBorder}`,borderRadius:14,padding:'28px 24px',
             cursor:'pointer',textAlign:'left',borderLeft:`4px solid ${t.color}`,display:'flex',flexDirection:'column',gap:6,transition:'all 0.2s'}}
@@ -339,7 +354,7 @@ export default function App() {
 
         {/* Print header — only visible during printing */}
         <div className="print-header" style={{display:'none'}}>
-          <div style={{fontFamily:fontHead,fontSize:20,fontWeight:700}}>Binned-IT Dashboard Hub — {dashTabs.find(t=>t.id===dashTab)?.label || 'REPORT'}</div>
+          <div style={{fontFamily:fontHead,fontSize:20,fontWeight:700}}>SkipSync — {dashTabs.find(t=>t.id===dashTab)?.label || 'REPORT'}</div>
           <div style={{fontSize:13,color:'#555'}}>Period: Jul 2025 – {selLabel} | Generated: {new Date().toLocaleDateString('en-AU')}</div>
         </div>
 
@@ -383,29 +398,36 @@ export default function App() {
   // ===== SIDE MENU =====
   const SideMenu = () => (<>
     {menuOpen && <div onClick={()=>setMenuOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',zIndex:200}} />}
-    <div style={{position:'fixed',top:0,left:menuOpen?0:-280,width:280,height:'100vh',background:B.cardBg,zIndex:201,transition:'left 0.25s ease',boxShadow:menuOpen?'4px 0 20px rgba(0,0,0,0.15)':'none',display:'flex',flexDirection:'column'}}>
-      <div style={{background:'#000',padding:'20px',borderBottom:`3px solid ${B.yellow}`}}>
-        <div style={{fontFamily:fontHead,fontSize:18,fontWeight:700,color:'#fff',textTransform:'uppercase'}}>Binned-IT</div>
-        <div style={{fontSize:11,color:'#888',marginTop:2}}>Dashboard Hub v{VERSION}</div>
+    <div style={{position:'fixed',top:0,left:menuOpen?0:-280,width:280,height:'100vh',background:B.slateBg,zIndex:201,transition:'left 0.25s ease',boxShadow:menuOpen?'4px 0 24px rgba(0,0,0,0.4)':'none',display:'flex',flexDirection:'column'}}>
+      <div style={{background:B.black,padding:'20px',borderBottom:`3px solid ${B.yellow}`}}>
+        <div style={{fontFamily:fontHead,fontSize:18,fontWeight:700,color:B.yellow,textTransform:'uppercase'}}>SkipSync</div>
+        <div style={{fontSize:11,color:'#888',marginTop:2}}>Operations Platform v{VERSION}</div>
       </div>
-      <div style={{flex:1,padding:'12px 0',overflowY:'auto'}}>
-        {menuItems.map(item => (
-          <button key={item.id} onClick={()=>{
-            if(item.id==='home') goHome();
-            else if(item.id==='dashboard'){navigate('/dashboard/snapshot');setDashTab('snapshot');setMenuOpen(false);}
+      <div style={{flex:1,padding:'8px 0',overflowY:'auto'}}>
+        {menuItems.map(item => (<React.Fragment key={item.id}>
+          {item.section && (
+            <div style={{padding:'10px 20px 4px',fontSize:9,fontFamily:fontHead,fontWeight:700,letterSpacing:'0.12em',color:'#555',textTransform:'uppercase',borderTop:item.section!=='OPERATIONS'?`1px solid #222`:'none',marginTop:item.section!=='OPERATIONS'?8:0}}>
+              {item.section}
+            </div>
+          )}
+          <button onClick={()=>{
+            if(item.id==='dashboard'){navigate('/dashboard/snapshot');setDashTab('snapshot');setMenuOpen(false);}
             else {navigate(`/${item.id}`);setMenuOpen(false);}
-          }} style={{width:'100%',display:'flex',alignItems:'center',gap:12,padding:'12px 20px',background:'none',border:'none',cursor:'pointer',fontSize:14,color:B.textPrimary,textAlign:'left'}}
-            onMouseOver={e=>e.currentTarget.style.background=B.bg} onMouseOut={e=>e.currentTarget.style.background='none'}>
+          }} style={{width:'100%',display:'flex',alignItems:'center',gap:12,padding:'10px 20px',background:'none',border:'none',cursor:'pointer',fontSize:14,color:'#ccc',textAlign:'left',transition:'all 0.15s'}}
+            onMouseOver={e=>{e.currentTarget.style.background='rgba(239,223,15,0.08)';e.currentTarget.style.color='#fff';}}
+            onMouseOut={e=>{e.currentTarget.style.background='none';e.currentTarget.style.color='#ccc';}}>
             <span style={{fontSize:18}}>{item.icon}</span><span style={{fontFamily:fontHead,fontWeight:500}}>{item.label}</span>
           </button>
-        ))}
-        {/* Investor View link */}
-        <button onClick={()=>{navigate('/investor');setMenuOpen(false);}} style={{width:'100%',display:'flex',alignItems:'center',gap:12,padding:'12px 20px',background:'none',border:'none',cursor:'pointer',fontSize:14,color:B.textPrimary,textAlign:'left'}}
-          onMouseOver={e=>e.currentTarget.style.background=B.bg} onMouseOut={e=>e.currentTarget.style.background='none'}>
-          <span style={{fontSize:18}}>📈</span><span style={{fontFamily:fontHead,fontWeight:500}}>Investor View</span>
-        </button>
+        </React.Fragment>))}
+        <div style={{borderTop:'1px solid #222',marginTop:8,paddingTop:4}}>
+          <button onClick={()=>{navigate('/investor');setMenuOpen(false);}} style={{width:'100%',display:'flex',alignItems:'center',gap:12,padding:'10px 20px',background:'none',border:'none',cursor:'pointer',fontSize:14,color:'#ccc',textAlign:'left'}}
+            onMouseOver={e=>{e.currentTarget.style.background='rgba(239,223,15,0.08)';e.currentTarget.style.color='#fff';}}
+            onMouseOut={e=>{e.currentTarget.style.background='none';e.currentTarget.style.color='#ccc';}}>
+            <span style={{fontSize:18}}>📈</span><span style={{fontFamily:fontHead,fontWeight:500}}>Investor View</span>
+          </button>
+        </div>
       </div>
-      <div style={{padding:'16px 20px',borderTop:`1px solid ${B.cardBorder}`,fontSize:10,color:B.textMuted}}>v{VERSION} - Published {BUILD_DATE}</div>
+      <div style={{padding:'16px 20px',borderTop:'1px solid #333',fontSize:10,color:'#666'}}>v{VERSION} · {BUILD_DATE}</div>
     </div>
   </>);
 
@@ -449,8 +471,8 @@ export default function App() {
   const AboutScreen = () => (
     <div style={{maxWidth:600,margin:'0 auto',padding:'40px 24px'}}>
       <div style={{background:B.cardBg,borderRadius:14,padding:32,boxShadow:'0 2px 8px rgba(0,0,0,0.06)',textAlign:'center'}}>
-        <div style={{fontFamily:fontHead,fontSize:24,fontWeight:700,color:B.textPrimary,textTransform:'uppercase'}}>Binned-IT Dashboard Hub</div>
-        <div style={{fontSize:14,color:B.textSecondary,marginTop:8}}>Management Intelligence Platform</div>
+        <div style={{fontFamily:fontHead,fontSize:24,fontWeight:700,color:B.textPrimary,textTransform:'uppercase'}}>SkipSync</div>
+        <div style={{fontSize:14,color:B.textSecondary,marginTop:8}}>Operations Intelligence Platform</div>
         <div style={{marginTop:24,display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,textAlign:'left'}}>
           {[{l:'Version',v:VERSION},{l:'Published',v:BUILD_DATE},{l:'Data Range',v:'Jul 2025 - Feb 2026'},{l:'Months Loaded',v:'8'},{l:'Platform',v:'React + Vite + Supabase'},{l:'AI Assistant',v:'Claude (Anthropic)'}].map((r,i)=>(
             <div key={i} style={{padding:'8px 12px',background:B.bg,borderRadius:6}}>
@@ -486,6 +508,16 @@ export default function App() {
     </div>
   );
 
+  // ===== OPERATIONS PLACEHOLDER =====
+  const ComingSoonPage = ({ title, icon, desc }) => (
+    <div style={{maxWidth:700,margin:'0 auto',padding:'60px 24px',textAlign:'center'}}>
+      <div style={{fontSize:56,marginBottom:20}}>{icon}</div>
+      <div style={{fontFamily:fontHead,fontSize:28,fontWeight:700,color:B.textPrimary,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:12}}>{title}</div>
+      <div style={{fontSize:15,color:B.textSecondary,marginBottom:32}}>{desc}</div>
+      <div style={{display:'inline-block',background:B.yellow,color:B.black,fontFamily:fontHead,fontWeight:700,fontSize:12,letterSpacing:'0.1em',textTransform:'uppercase',padding:'8px 20px',borderRadius:6}}>Coming in SkipSync v3</div>
+    </div>
+  );
+
   const alerts_count = useMemo(() => {
     return (alerts.snapshot||[]).filter(a=>a.sev==='critical').length;
   }, [alerts]);
@@ -507,6 +539,10 @@ export default function App() {
         <Route path="/fleet-assets" element={<FleetAssetsTab />} />
         <Route path="/history" element={<HistoryScreen />} />
         <Route path="/reports" element={<ReportsScreen />} />
+        <Route path="/dispatch" element={<ComingSoonPage title="Dispatch" icon="📡" desc="Real-time job dispatch, driver assignment, and route optimisation." />} />
+        <Route path="/bookings" element={<ComingSoonPage title="Bookings" icon="📅" desc="Manage all bin hire bookings, schedule pickups, and track job status." />} />
+        <Route path="/customers" element={<ComingSoonPage title="Customers" icon="👥" desc="Customer accounts, job history, account balances, and communications." />} />
+        <Route path="/drivers" element={<ComingSoonPage title="Drivers" icon="👷" desc="Driver profiles, licences, compliance, and daily job assignments." />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/about" element={<AboutScreen />} />
         <Route path="*" element={<Navigate to="/home" replace />} />

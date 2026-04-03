@@ -6,8 +6,8 @@
  * get YTD up to a month, get monthly averages.
  */
 
-const STORE_KEY = 'binnedit_datastore_v2';
-const META_KEY = 'binnedit_meta_v2';
+const STORE_KEY = 'skipsync_datastore_v2';
+const META_KEY = 'skipsync_meta_v2';
 
 // ===== PERSISTENCE =====
 function loadStore() {

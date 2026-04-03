@@ -1,11 +1,11 @@
 {
-  "name": "Binned-IT Dashboard Hub",
-  "short_name": "BinnedIT",
-  "description": "Management intelligence platform for Binned-IT Pty Ltd",
+  "name": "SkipSync",
+  "short_name": "SkipSync",
+  "description": "Operations intelligence platform for skip bin hire — powered by SkipSync",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#F5C518",
+  "background_color": "#000006",
+  "theme_color": "#EFDF0F",
   "icons": [
     { "src": "/logo.jpg", "sizes": "any", "type": "image/jpeg", "purpose": "any maskable" },
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/jpeg" },
