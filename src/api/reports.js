@@ -207,6 +207,100 @@ export async function upsertCustomerAcquisitions(reportId, reportMonth, acquisit
 }
 
 // -------------------------------------------------------
+// Churn Detection
+// -------------------------------------------------------
+
+/**
+ * Detects customers at risk of churn by comparing their most recent
+ * month's AR balance against their 3-month rolling average.
+ *
+ * Falls back to debtors_monthly when customer_order_history is empty.
+ * A >40% drop in total_outstanding (as a proxy for ordering activity)
+ * flags a customer as at-risk.
+ */
+export async function getChurnSignals(currentMonth) {
+  // Try customer_order_history first (populated by Xero sync)
+  const { data: orderHistory } = await supabase
+    .from('customer_order_history')
+    .select('customer_name, report_month, revenue, order_count')
+    .gte('report_month', '2025-01-01')
+    .lte('report_month', currentMonth)
+    .order('report_month', { ascending: false })
+    .limit(200)
+
+  if (orderHistory && orderHistory.length > 0) {
+    return buildChurnSignalsFromHistory(orderHistory, currentMonth)
+  }
+
+  // Fallback: use debtors_monthly AR as a proxy for ordering activity
+  // Get 4 months of debtor data up to currentMonth
+  const fourMonthsAgo = new Date(currentMonth)
+  fourMonthsAgo.setMonth(fourMonthsAgo.getMonth() - 4)
+  const fromMonth = fourMonthsAgo.toISOString().slice(0, 10)
+
+  const { data: debtors, error } = await supabase
+    .from('debtors_monthly')
+    .select('customer_name, report_month, total_outstanding')
+    .gte('report_month', fromMonth)
+    .lte('report_month', currentMonth)
+    .order('report_month', { ascending: false })
+    .limit(400)
+
+  if (error || !debtors?.length) return []
+
+  return buildChurnSignalsFromDebtors(debtors, currentMonth)
+}
+
+function buildChurnSignalsFromHistory(rows, currentMonth) {
+  const byCustomer = {}
+  rows.forEach(r => {
+    if (!byCustomer[r.customer_name]) byCustomer[r.customer_name] = []
+    byCustomer[r.customer_name].push({ month: r.report_month.slice(0, 7), revenue: r.revenue || 0, orders: r.order_count || 0 })
+  })
+
+  const signals = []
+  const curMonthKey = currentMonth.slice(0, 7)
+  Object.entries(byCustomer).forEach(([name, entries]) => {
+    entries.sort((a, b) => b.month.localeCompare(a.month))
+    const current = entries.find(e => e.month === curMonthKey)
+    const previous = entries.filter(e => e.month < curMonthKey).slice(0, 3)
+    if (!current || previous.length < 2) return
+    const avgPrevRevenue = previous.reduce((s, e) => s + e.revenue, 0) / previous.length
+    if (avgPrevRevenue < 500) return // ignore low-value customers
+    const drop = avgPrevRevenue > 0 ? ((avgPrevRevenue - current.revenue) / avgPrevRevenue) * 100 : 0
+    if (drop >= 40) {
+      signals.push({ customer_name: name, drop_pct: Math.round(drop), current_revenue: current.revenue, avg_revenue: Math.round(avgPrevRevenue), source: 'order_history' })
+    }
+  })
+  return signals.sort((a, b) => b.drop_pct - a.drop_pct)
+}
+
+function buildChurnSignalsFromDebtors(rows, currentMonth) {
+  const byCustomer = {}
+  rows.forEach(r => {
+    if (!byCustomer[r.customer_name]) byCustomer[r.customer_name] = []
+    byCustomer[r.customer_name].push({ month: r.report_month.slice(0, 7), total: parseFloat(r.total_outstanding || 0) })
+  })
+
+  const signals = []
+  const curMonthKey = currentMonth.slice(0, 7)
+  Object.entries(byCustomer).forEach(([name, entries]) => {
+    entries.sort((a, b) => b.month.localeCompare(a.month))
+    const current = entries.find(e => e.month === curMonthKey)
+    const previous = entries.filter(e => e.month < curMonthKey).slice(0, 3)
+    if (previous.length < 2) return
+    const avgPrev = previous.reduce((s, e) => s + e.total, 0) / previous.length
+    if (avgPrev < 1000) return // ignore small accounts
+    const curTotal = current?.total ?? 0
+    const drop = avgPrev > 0 ? ((avgPrev - curTotal) / avgPrev) * 100 : 0
+    if (drop >= 40) {
+      signals.push({ customer_name: name, drop_pct: Math.round(drop), current_revenue: curTotal, avg_revenue: Math.round(avgPrev), source: 'debtors_ar' })
+    }
+  })
+  return signals.sort((a, b) => b.drop_pct - a.drop_pct)
+}
+
+// -------------------------------------------------------
 // Compliance Records
 // -------------------------------------------------------
 

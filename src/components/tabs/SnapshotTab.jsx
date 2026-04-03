@@ -98,6 +98,13 @@ export default function SnapshotTab({ reportId, reportMonth, selectedMonth, mont
   const bsFixedAssets = balance?.fixed_assets ?? D.balanceSheet.fixedAssets.total;
   const bsCurrentYearEarnings = balance?.current_year_earnings ?? D.balanceSheet.equity.currentYearEarnings;
 
+  // ESG data from Supabase (no fallback — only shown when entered)
+  const esgDiverted = financials?.esg_tonnes_diverted ?? 0;
+  const esgLandfill = financials?.esg_landfill_tonnes ?? 0;
+  const esgRecycling = financials?.esg_recycling_rate ?? 0;
+  const esgCo2 = financials?.esg_co2_offset_est ?? 0;
+  const hasEsgData = esgDiverted > 0 || esgLandfill > 0;
+
   // Compare month fallback values
   const cRev = compareFinancials?.rev_total || compareFinancials?.revenue_total || (compareMi >= 0 ? D.totalRevenue[compareMi] : 0);
   const cNP = compareFinancials?.net_profit || (compareMi >= 0 ? D.netProfit[compareMi] : 0);
@@ -259,6 +266,49 @@ export default function SnapshotTab({ reportId, reportMonth, selectedMonth, mont
         <KPITile label="Fixed Assets" value={fmtFull(bsFixedAssets)} sub="Trucks, bins, equipment" status="green" />
         <KPITile label="Current Year Earnings" value={fmtFull(bsCurrentYearEarnings)} status={bsCurrentYearEarnings > 0 ? 'green' : 'red'} />
       </div>
+      {/* ESG Widget */}
+      {hasEsgData ? (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 10 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: B.textPrimary, margin: 0, fontFamily: fontHead, textTransform: 'uppercase' }}>
+              ESG / Sustainability
+            </h3>
+            <p style={{ fontSize: 12, color: B.textSecondary, margin: '2px 0 0' }}>Waste diversion and recycling for {monthLabel}</p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12 }}>
+            <KPITile label="Tonnes Diverted" value={`${esgDiverted.toFixed(1)}t`} sub="From landfill" status="green" />
+            <KPITile label="Recycling Rate" value={`${esgRecycling.toFixed(1)}%`} sub="Of total waste" status={esgRecycling >= 30 ? 'green' : esgRecycling >= 15 ? 'amber' : 'red'} />
+            <KPITile label="Landfill" value={`${esgLandfill.toFixed(1)}t`} sub="Tonnes to landfill" status="red" />
+            <KPITile label="Est. CO₂ Offset" value={`${esgCo2.toFixed(1)}kg`} sub="CO₂e avoided" status="green" />
+          </div>
+          {esgDiverted > 0 && esgLandfill > 0 && (
+            <div style={{ marginTop: 10, background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 8, padding: '12px 16px' }}>
+              <div style={{ fontSize: 11, color: B.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Waste Diversion — {monthLabel}</div>
+              <div style={{ display: 'flex', gap: 0, height: 16, borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ width: `${esgRecycling}%`, background: B.teal, transition: 'width 0.4s' }} title={`Diverted: ${esgDiverted.toFixed(1)}t`} />
+                <div style={{ flex: 1, background: B.red + '60' }} title={`Landfill: ${esgLandfill.toFixed(1)}t`} />
+              </div>
+              <div style={{ display: 'flex', gap: 16, marginTop: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: 2, background: B.teal }} />
+                  <span style={{ fontSize: 10, color: B.textMuted }}>Diverted {esgRecycling.toFixed(1)}%</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: 2, background: B.red + '60' }} />
+                  <span style={{ fontSize: 10, color: B.textMuted }}>Landfill {(100 - esgRecycling).toFixed(1)}%</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ marginBottom: 20, padding: '14px 18px', background: B.cardBg, border: `1px dashed ${B.cardBorder}`, borderRadius: 8 }}>
+          <span style={{ fontSize: 12, color: B.textMuted }}>
+            ESG data not yet entered for this month. Add tonnes diverted and recycling rate in the monthly wizard (Step 10).
+          </span>
+        </div>
+      )}
+
       <AIInsightsPanel
         tabName="Business Snapshot"
         contextSummary={snapshotContext}

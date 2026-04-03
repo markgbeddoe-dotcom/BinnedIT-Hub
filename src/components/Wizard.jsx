@@ -120,6 +120,11 @@ export default function Wizard({ onComplete, onHome, selectedMonth }) {
   const [cEpaRenewal, setCEpaRenewal] = useState('');
   const [cInsurance, setCInsurance] = useState('');
 
+  // ESG state
+  const [esgTonnesDiverted, setEsgTonnesDiverted] = useState('');
+  const [esgLandfillTonnes, setEsgLandfillTonnes] = useState('');
+  const [esgRecyclingRate, setEsgRecyclingRate] = useState('');
+
   // Market state — individual pieces
   const [mOutlook, setMOutlook] = useState('normal');
   const [mKeyWins, setMKeyWins] = useState('');
@@ -436,6 +441,57 @@ export default function Wizard({ onComplete, onHome, selectedMonth }) {
                 <input value={mEquipmentDetails} onChange={e => setMEquipmentDetails(e.target.value)} placeholder="Item, estimated cost, timeframe" style={inputStyle} />
               </FormField>}
             </SectionBox>
+
+            <SectionBox title="ESG / Sustainability" color={B.teal}>
+              <div style={{ fontSize: 12, color: B.textMuted, marginBottom: 4 }}>
+                Track waste diversion from landfill. Estimate from your Bin Manager tip-site data.
+              </div>
+              <FormField label="Tonnes diverted from landfill (recycled / recovered)">
+                <input
+                  type="number" min="0" step="0.1"
+                  value={esgTonnesDiverted}
+                  onChange={e => {
+                    setEsgTonnesDiverted(e.target.value);
+                    // Auto-calculate recycling rate if landfill tonnes is set
+                    const diverted = parseFloat(e.target.value) || 0;
+                    const landfill = parseFloat(esgLandfillTonnes) || 0;
+                    const total = diverted + landfill;
+                    if (total > 0) setEsgRecyclingRate((diverted / total * 100).toFixed(1));
+                  }}
+                  placeholder="e.g. 45.5"
+                  style={inputStyle}
+                />
+              </FormField>
+              <FormField label="Tonnes sent to landfill">
+                <input
+                  type="number" min="0" step="0.1"
+                  value={esgLandfillTonnes}
+                  onChange={e => {
+                    setEsgLandfillTonnes(e.target.value);
+                    const diverted = parseFloat(esgTonnesDiverted) || 0;
+                    const landfill = parseFloat(e.target.value) || 0;
+                    const total = diverted + landfill;
+                    if (total > 0) setEsgRecyclingRate((diverted / total * 100).toFixed(1));
+                  }}
+                  placeholder="e.g. 120"
+                  style={inputStyle}
+                />
+              </FormField>
+              <FormField label="Recycling rate % (auto-calculated, or enter manually)">
+                <input
+                  type="number" min="0" max="100" step="0.1"
+                  value={esgRecyclingRate}
+                  onChange={e => setEsgRecyclingRate(e.target.value)}
+                  placeholder="e.g. 27.5"
+                  style={inputStyle}
+                />
+              </FormField>
+              {(parseFloat(esgTonnesDiverted) > 0) && (
+                <div style={{ background: B.teal + '18', border: `1px solid ${B.teal}40`, borderRadius: 6, padding: '10px 14px', fontSize: 12, color: B.teal }}>
+                  Estimated CO₂ offset: <strong>{(parseFloat(esgTonnesDiverted) * 0.5).toFixed(1)} kg CO₂e</strong> (based on 0.5 kg CO₂e per tonne diverted)
+                </div>
+              )}
+            </SectionBox>
           </div>
         )}
 
@@ -455,7 +511,7 @@ export default function Wizard({ onComplete, onHome, selectedMonth }) {
                 </div>
               ))}
             </div>
-            <button type="button" onClick={() => onComplete({ files, parsed, selectedMonth, bankBalance, quality: { unreconciledCount: qUnreconciledCount, unreconciledValue: qUnreconciledValue, bankRecStatus: qBankRecStatus, plStatus: qPlStatus, missingInvoices: qMissingInvoices }, compliance: { whsIncidents: cWhsIncidents, whsDetails: cWhsDetails, nearMiss: cNearMiss, nearMissDetails: cNearMissDetails, whsRegister: cWhsRegister, lastToolbox: cLastToolbox, trainingRows: cTrainingRows, certExpiring: cCertExpiring, certExpired: cCertExpired, newStaff: cNewStaff, trainingRegister: cTrainingRegister, asbJobs: cAsbJobs, asbDocs: cAsbDocs, asbClearance: cAsbClearance, asbComplaints: cAsbComplaints, asbComplaintDetails: cAsbComplaintDetails, vehiclesOffRoad: cVehiclesOffRoad, vehiclesOffRoadReason: cVehiclesOffRoadReason, vehicleRegos: cVehicleRegos, fleetInspections: cFleetInspections, epaStatus: cEpaStatus, epaRenewal: cEpaRenewal, insurance: cInsurance }, market: { outlook: mOutlook, keyWins: mKeyWins, keyRisks: mKeyRisks, referralSources: mReferralSources, customersAtRisk: mCustomersAtRisk, paymentsExpected: mPaymentsExpected, billsDue: mBillsDue } })}
+            <button type="button" onClick={() => onComplete({ files, parsed, selectedMonth, bankBalance, quality: { unreconciledCount: qUnreconciledCount, unreconciledValue: qUnreconciledValue, bankRecStatus: qBankRecStatus, plStatus: qPlStatus, missingInvoices: qMissingInvoices }, compliance: { whsIncidents: cWhsIncidents, whsDetails: cWhsDetails, nearMiss: cNearMiss, nearMissDetails: cNearMissDetails, whsRegister: cWhsRegister, lastToolbox: cLastToolbox, trainingRows: cTrainingRows, certExpiring: cCertExpiring, certExpired: cCertExpired, newStaff: cNewStaff, trainingRegister: cTrainingRegister, asbJobs: cAsbJobs, asbDocs: cAsbDocs, asbClearance: cAsbClearance, asbComplaints: cAsbComplaints, asbComplaintDetails: cAsbComplaintDetails, vehiclesOffRoad: cVehiclesOffRoad, vehiclesOffRoadReason: cVehiclesOffRoadReason, vehicleRegos: cVehicleRegos, fleetInspections: cFleetInspections, epaStatus: cEpaStatus, epaRenewal: cEpaRenewal, insurance: cInsurance }, market: { outlook: mOutlook, keyWins: mKeyWins, keyRisks: mKeyRisks, referralSources: mReferralSources, customersAtRisk: mCustomersAtRisk, paymentsExpected: mPaymentsExpected, billsDue: mBillsDue }, esg: { tonnesDiverted: parseFloat(esgTonnesDiverted) || 0, landfillTonnes: parseFloat(esgLandfillTonnes) || 0, recyclingRate: parseFloat(esgRecyclingRate) || 0, co2OffsetEst: (parseFloat(esgTonnesDiverted) || 0) * 0.5 } })}
               style={{ width: '100%', background: B.green, color: B.white, border: 'none', padding: 14, borderRadius: 8, fontFamily: fontHead, fontSize: 16, fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase' }}>
               ✓ Generate Dashboard
             </button>

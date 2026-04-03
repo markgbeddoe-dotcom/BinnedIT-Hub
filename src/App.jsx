@@ -170,6 +170,11 @@ export default function App() {
         cash_income: cash.totalIncome || 0,
         cash_expenses: cash.totalExpenses || 0,
         cash_net_movement: (cash.totalIncome || 0) - (cash.totalExpenses || 0),
+        // ESG fields from wizard step 10
+        esg_tonnes_diverted: data.esg?.tonnesDiverted || 0,
+        esg_landfill_tonnes: data.esg?.landfillTonnes || 0,
+        esg_recycling_rate: data.esg?.recyclingRate || 0,
+        esg_co2_offset_est: data.esg?.co2OffsetEst || 0,
       });
 
       // 3. Upsert compliance if wizard collected it

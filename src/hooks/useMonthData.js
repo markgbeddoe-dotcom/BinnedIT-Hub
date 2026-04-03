@@ -38,6 +38,7 @@ import {
   getBinPerformanceForMonth,
   getComplianceForMonth,
   getCustomerAcquisitionsForMonth,
+  getChurnSignals,
   createReport,
   upsertFinancials,
   upsertBalanceSheet,
@@ -115,6 +116,15 @@ export function useReport(reportMonth) {
     queryKey: ['report', reportMonth],
     queryFn: () => getReportForMonth(reportMonth),
     enabled: !!reportMonth,
+  })
+}
+
+export function useChurnSignals(reportMonth) {
+  return useQuery({
+    queryKey: ['churn-signals', reportMonth],
+    queryFn: () => getChurnSignals(reportMonth),
+    enabled: !!reportMonth,
+    staleTime: 5 * 60 * 1000,
   })
 }
 
