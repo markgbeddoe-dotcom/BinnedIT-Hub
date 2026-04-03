@@ -11,6 +11,10 @@
 //   - Cash flow position
 //   - Any churn signals from customer_order_history
 //   - Claude's analysis and recommendations
+//
+// DOMAIN RESTRICTION: Emails may only be sent to @binnedit.com.au addresses.
+// All other recipients are blocked. This restriction is in place until further
+// notice from the project owner.
 
 export const config = { runtime: 'edge' }
 
@@ -18,6 +22,11 @@ const RESEND_API = 'https://api.resend.com/emails'
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
 const DIGEST_TO = 'mark@binnedit.com.au'
 const FROM_EMAIL = 'Binned-IT Hub <digest@binnedit.com.au>'
+const ALLOWED_DOMAIN = 'binnedit.com.au'
+
+function isAllowedDomain(email) {
+  return typeof email === 'string' && email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`)
+}
 
 async function fetchJson(url, headers) {
   const res = await fetch(url, { headers })
@@ -237,6 +246,12 @@ Keep it under 250 words. Be direct and practical — Mark is busy.`,
   </div>
 </body>
 </html>`
+
+  // Domain restriction: only send to @binnedit.com.au addresses
+  if (!isAllowedDomain(DIGEST_TO)) {
+    console.warn(`[weekly-digest] Blocked — recipient ${DIGEST_TO} is not @${ALLOWED_DOMAIN}`)
+    return new Response(JSON.stringify({ error: 'Recipient domain not allowed' }), { status: 403 })
+  }
 
   // Send via Resend
   const sendRes = await fetch(RESEND_API, {

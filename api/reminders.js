@@ -13,6 +13,10 @@
 //      see if we've already sent a reminder this cycle
 //   3. Send appropriate tier email via Resend API
 //   4. Log in email_reminders_log to prevent duplicates
+//
+// DOMAIN RESTRICTION: Emails may only be sent to @binnedit.com.au addresses.
+// All other recipients are skipped and logged as a warning. This restriction
+// is in place until further notice from the project owner.
 
 export const config = { runtime: 'edge' }
 
@@ -20,6 +24,11 @@ const RESEND_API = 'https://api.resend.com/emails'
 const FROM_EMAIL = 'Binned-IT Accounts <accounts@binnedit.com.au>'
 const OWNER_EMAIL = 'mark@binnedit.com.au'
 const BUSINESS_NAME = 'Binned-IT Pty Ltd'
+const ALLOWED_DOMAIN = 'binnedit.com.au'
+
+function isAllowedDomain(email) {
+  return typeof email === 'string' && email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`)
+}
 
 async function sendEmail(apiKey, to, subject, html) {
   const res = await fetch(RESEND_API, {
@@ -160,6 +169,12 @@ export default async function handler(req) {
 
     // Skip if no email address
     if (!customer_email) continue
+
+    // Domain restriction: only send to @binnedit.com.au addresses
+    if (!isAllowedDomain(customer_email)) {
+      console.warn(`[reminders] Skipping ${customer_name} — recipient ${customer_email} is not @${ALLOWED_DOMAIN}`)
+      continue
+    }
 
     // Determine which reminder tier applies
     // bucket_30 = 30-60 day overdue, bucket_60 = 60-90 days, bucket_90 = 90+ days
