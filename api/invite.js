@@ -1,5 +1,9 @@
 // Vercel Edge Function — invite a new user via Supabase Admin API
 // Uses SUPABASE_SERVICE_ROLE_KEY (server-side only, never exposed to browser)
+//
+// DOMAIN RESTRICTION: Invitations (which trigger a magic-link email) may only
+// be sent to @binnedit.com.au addresses. All other recipients are rejected.
+// This restriction is in place until further notice from the project owner.
 
 /**
  * @file api/invite.js — Vercel Edge Function
@@ -11,6 +15,7 @@
  * - Caller must be authenticated (Authorization: Bearer <JWT>)
  * - Caller must have role = 'owner' in the profiles table
  * - SUPABASE_SERVICE_ROLE_KEY is used server-side only
+ * - Invites restricted to @binnedit.com.au domain only
  *
  * Request body: { email: string, role: 'owner'|'manager'|'bookkeeper'|'viewer' }
  * Response: { success: true, userId: string } or { error: string }
@@ -22,6 +27,11 @@
 export const config = { runtime: 'edge' };
 
 const SUPABASE_URL = 'https://dkjwyzjzdcgrepbgiuei.supabase.co';
+const ALLOWED_DOMAIN = 'binnedit.com.au';
+
+function isAllowedDomain(email) {
+  return typeof email === 'string' && email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`)
+}
 
 export default async function handler(req) {
   if (req.method !== 'POST') {
@@ -44,6 +54,12 @@ export default async function handler(req) {
   const VALID_ROLES = ['owner', 'manager', 'bookkeeper', 'viewer'];
   if (!email || !role || !VALID_ROLES.includes(role)) {
     return new Response(JSON.stringify({ error: 'email and a valid role are required' }), { status: 400 });
+  }
+
+  // Domain restriction: only invite @binnedit.com.au addresses
+  if (!isAllowedDomain(email)) {
+    console.warn(`[invite] Blocked invite — recipient ${email} is not @${ALLOWED_DOMAIN}`)
+    return new Response(JSON.stringify({ error: `Invitations are currently restricted to @${ALLOWED_DOMAIN} addresses` }), { status: 403 });
   }
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

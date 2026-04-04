@@ -11,6 +11,9 @@
 //   SUPABASE_SERVICE_ROLE_KEY
 //   RESEND_API_KEY
 //   CRON_SECRET (Vercel auto-injects for cron auth)
+//
+// DOMAIN RESTRICTION: Emails may only be sent to @binnedit.com.au addresses.
+// All other recipients are blocked.
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dkjwyzjzdcgrepbgiuei.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -18,6 +21,11 @@ const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY
 const RESEND_KEY = process.env.RESEND_API_KEY
 const DIGEST_TO = 'mark@binnedit.com.au'
 const DIGEST_FROM = 'BinnedIT Hub <digest@binnedit.com.au>'
+const ALLOWED_DOMAIN = 'binnedit.com.au'
+
+function isAllowedDomain(email) {
+  return typeof email === 'string' && email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`)
+}
 
 async function supabaseGet(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -237,6 +245,12 @@ function buildEmailHtml(aiAnalysis, metricsSummary, generatedAt) {
 }
 
 async function sendEmail(subject, html) {
+  // Domain restriction: only send to @binnedit.com.au addresses
+  if (!isAllowedDomain(DIGEST_TO)) {
+    console.warn(`[weekly-digest] Blocked — recipient ${DIGEST_TO} is not @${ALLOWED_DOMAIN}`)
+    throw new Error(`Recipient domain not allowed: ${DIGEST_TO}`)
+  }
+
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
