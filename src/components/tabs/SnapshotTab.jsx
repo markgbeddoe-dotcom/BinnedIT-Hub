@@ -266,48 +266,60 @@ export default function SnapshotTab({ reportId, reportMonth, selectedMonth, mont
         <KPITile label="Fixed Assets" value={fmtFull(bsFixedAssets)} sub="Trucks, bins, equipment" status="green" />
         <KPITile label="Current Year Earnings" value={fmtFull(bsCurrentYearEarnings)} status={bsCurrentYearEarnings > 0 ? 'green' : 'red'} />
       </div>
-      {/* ESG Widget */}
-      {hasEsgData ? (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ marginBottom: 10 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: B.textPrimary, margin: 0, fontFamily: fontHead, textTransform: 'uppercase' }}>
-              ESG / Sustainability
-            </h3>
-            <p style={{ fontSize: 12, color: B.textSecondary, margin: '2px 0 0' }}>Waste diversion and recycling for {monthLabel}</p>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12 }}>
-            <KPITile label="Tonnes Diverted" value={`${esgDiverted.toFixed(1)}t`} sub="From landfill" status="green" />
-            <KPITile label="Recycling Rate" value={`${esgRecycling.toFixed(1)}%`} sub="Of total waste" status={esgRecycling >= 30 ? 'green' : esgRecycling >= 15 ? 'amber' : 'red'} />
-            <KPITile label="Landfill" value={`${esgLandfill.toFixed(1)}t`} sub="Tonnes to landfill" status="red" />
-            <KPITile label="Est. CO₂ Offset" value={`${esgCo2.toFixed(1)}kg`} sub="CO₂e avoided" status="green" />
-          </div>
-          {esgDiverted > 0 && esgLandfill > 0 && (
-            <div style={{ marginTop: 10, background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 8, padding: '12px 16px' }}>
-              <div style={{ fontSize: 11, color: B.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Waste Diversion — {monthLabel}</div>
-              <div style={{ display: 'flex', gap: 0, height: 16, borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ width: `${esgRecycling}%`, background: B.teal, transition: 'width 0.4s' }} title={`Diverted: ${esgDiverted.toFixed(1)}t`} />
-                <div style={{ flex: 1, background: B.red + '60' }} title={`Landfill: ${esgLandfill.toFixed(1)}t`} />
+      {/* ESG / Waste Diversion Widget */}
+      {(() => {
+        const lf = financials?.tonnes_landfill ?? null;
+        const dv = financials?.tonnes_diverted ?? financials?.tonnes_recycled ?? null;
+        const rc = financials?.tonnes_recycled ?? null;
+        if (lf === null && dv === null) return null;
+        const total = (lf || 0) + (dv || 0);
+        const rate = total > 0 ? Math.round((dv || 0) / total * 1000) / 10 : 0;
+
+        // YTD diverted from all months
+        const ytdDiverted = ytdRows
+          ? ytdRows.reduce((s, r) => s + (r.tonnes_diverted || r.tonnes_recycled || 0), 0)
+          : dv || 0;
+
+        // Trend: compare last two months if available
+        let trendIcon = null;
+        if (ytdRows && ytdRows.length >= 2) {
+          const prev = ytdRows[ytdRows.length - 2];
+          const prevTotal = (prev.tonnes_landfill || 0) + (prev.tonnes_diverted || prev.tonnes_recycled || 0);
+          const prevRate = prevTotal > 0 ? (prev.tonnes_diverted || prev.tonnes_recycled || 0) / prevTotal * 100 : 0;
+          if (rate > prevRate + 1) trendIcon = <span style={{ color: B.green, fontWeight: 700 }}>↑ improving</span>;
+          else if (rate < prevRate - 1) trendIcon = <span style={{ color: B.red, fontWeight: 700 }}>↓ declining</span>;
+          else trendIcon = <span style={{ color: B.textMuted }}>→ stable</span>;
+        }
+
+        return (
+          <div style={{ marginTop: 20, marginBottom: 12 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: B.textPrimary, margin: '0 0 4px', fontFamily: fontHead, textTransform: 'uppercase' }}>ESG — Waste Diversion</h3>
+            <p style={{ fontSize: 12, color: B.textSecondary, margin: '0 0 10px' }}>Landfill diversion tracking for {monthLabel}</p>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 12 }}>
+              <div style={{ background: B.cardBg, borderRadius: 10, padding: '14px 16px', border: `1px solid ${B.cardBorder}`, borderTop: `3px solid ${B.teal}` }}>
+                <div style={{ fontSize: 10, color: B.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>Diversion Rate</div>
+                <div style={{ fontFamily: fontHead, fontSize: 26, fontWeight: 700, color: rate >= 50 ? B.green : B.amber }}>{rate}%</div>
+                <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 4 }}>{trendIcon}</div>
               </div>
-              <div style={{ display: 'flex', gap: 16, marginTop: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: 2, background: B.teal }} />
-                  <span style={{ fontSize: 10, color: B.textMuted }}>Diverted {esgRecycling.toFixed(1)}%</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: 2, background: B.red + '60' }} />
-                  <span style={{ fontSize: 10, color: B.textMuted }}>Landfill {(100 - esgRecycling).toFixed(1)}%</span>
-                </div>
+              <div style={{ background: B.cardBg, borderRadius: 10, padding: '14px 16px', border: `1px solid ${B.cardBorder}`, borderTop: `3px solid ${B.green}` }}>
+                <div style={{ fontSize: 10, color: B.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>Tonnes Diverted</div>
+                <div style={{ fontFamily: fontHead, fontSize: 26, fontWeight: 700, color: B.green }}>{(dv || 0).toFixed(1)}t</div>
+                <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 4 }}>this month</div>
+              </div>
+              <div style={{ background: B.cardBg, borderRadius: 10, padding: '14px 16px', border: `1px solid ${B.cardBorder}`, borderTop: `3px solid ${B.red}` }}>
+                <div style={{ fontSize: 10, color: B.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>Tonnes to Landfill</div>
+                <div style={{ fontFamily: fontHead, fontSize: 26, fontWeight: 700, color: B.red }}>{(lf || 0).toFixed(1)}t</div>
+                <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 4 }}>this month</div>
+              </div>
+              <div style={{ background: B.cardBg, borderRadius: 10, padding: '14px 16px', border: `1px solid ${B.cardBorder}`, borderTop: `3px solid ${B.cyan}` }}>
+                <div style={{ fontSize: 10, color: B.textMuted, textTransform: 'uppercase', marginBottom: 4 }}>YTD Diverted</div>
+                <div style={{ fontFamily: fontHead, fontSize: 26, fontWeight: 700, color: B.cyan }}>{ytdDiverted.toFixed(1)}t</div>
+                <div style={{ fontSize: 11, color: B.textSecondary, marginTop: 4 }}>{monthCount} months</div>
               </div>
             </div>
-          )}
-        </div>
-      ) : (
-        <div style={{ marginBottom: 20, padding: '14px 18px', background: B.cardBg, border: `1px dashed ${B.cardBorder}`, borderRadius: 8 }}>
-          <span style={{ fontSize: 12, color: B.textMuted }}>
-            ESG data not yet entered for this month. Add tonnes diverted and recycling rate in the monthly wizard (Step 10).
-          </span>
-        </div>
-      )}
+          </div>
+        );
+      })()}
 
       <AIInsightsPanel
         tabName="Business Snapshot"

@@ -204,6 +204,10 @@ export default function App() {
         esg_landfill_tonnes: data.esg?.landfillTonnes || 0,
         esg_recycling_rate: data.esg?.recyclingRate || 0,
         esg_co2_offset_est: data.esg?.co2OffsetEst || 0,
+        // ESG / waste diversion fields (weekly digest)
+        tonnes_landfill: data.esg?.landfill ? parseFloat(data.esg.landfill) || null : null,
+        tonnes_recycled: data.esg?.recycled ? parseFloat(data.esg.recycled) || null : null,
+        tonnes_diverted: data.esg?.diverted ? parseFloat(data.esg.diverted) || null : null,
       });
 
       // 3. Upsert compliance if wizard collected it

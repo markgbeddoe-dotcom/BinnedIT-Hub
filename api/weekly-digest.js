@@ -1,265 +1,301 @@
-// Vercel Cron Function — Weekly AI Business Digest Email
-// Schedule: 0 20 * * 0  (Sunday 8pm UTC = Monday 6am AEST)
+// api/weekly-digest.js — Weekly AI business digest email
+// Vercel Cron: every Monday 8am AEST (Sunday 21:00 UTC)
+// Schedule defined in vercel.json: "0 21 * * 0"
 //
-// Fetches key metrics from Supabase, sends to Claude for analysis,
-// then emails the digest to Mark via Resend.
+// Queries Supabase for latest business metrics, sends data to Claude API
+// for plain-English analysis, emails summary to Mark via Resend.
 //
-// Sections:
-//   - P&L summary (latest month + YTD)
-//   - Overdue AR / top debtors
-//   - Compliance expiries in the next 30 days
-//   - Cash flow position
-//   - Any churn signals from customer_order_history
-//   - Claude's analysis and recommendations
+// Required env vars:
+//   ANTHROPIC_API_KEY
+//   SUPABASE_URL (default: https://dkjwyzjzdcgrepbgiuei.supabase.co)
+//   SUPABASE_SERVICE_ROLE_KEY
+//   RESEND_API_KEY
+//   CRON_SECRET (Vercel auto-injects for cron auth)
 
-export const config = { runtime: 'edge' }
-
-const RESEND_API = 'https://api.resend.com/emails'
-const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dkjwyzjzdcgrepbgiuei.supabase.co'
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY
+const RESEND_KEY = process.env.RESEND_API_KEY
 const DIGEST_TO = 'mark@binnedit.com.au'
-const FROM_EMAIL = 'SkipSync <digest@binnedit.com.au>'
+const DIGEST_FROM = 'BinnedIT Hub <digest@binnedit.com.au>'
 
-async function fetchJson(url, headers) {
-  const res = await fetch(url, { headers })
+async function supabaseGet(path) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    },
+  })
   if (!res.ok) return null
   return res.json()
 }
 
-export default async function handler(req) {
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 })
-  }
-
-  const SUPABASE_URL = process.env.SUPABASE_URL
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
-  const RESEND_API_KEY = process.env.RESEND_API_KEY
-
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return new Response(JSON.stringify({ error: 'Supabase not configured' }), { status: 500 })
-  }
-  if (!ANTHROPIC_API_KEY) {
-    return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }), { status: 500 })
-  }
-  if (!RESEND_API_KEY) {
-    return new Response(JSON.stringify({ error: 'RESEND_API_KEY not configured' }), { status: 500 })
-  }
-
-  const sb = {
-    apikey: SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-  }
-
-  // ---- Gather data in parallel ----
-  const [financials, debtors, compliance, ytdRows] = await Promise.all([
-    // Latest month financials
-    fetchJson(`${SUPABASE_URL}/rest/v1/financials_monthly?select=*&order=report_month.desc&limit=1`, sb),
-    // Latest debtors
-    fetchJson(`${SUPABASE_URL}/rest/v1/debtors_monthly?select=*&order=report_month.desc,total_outstanding.desc&limit=20`, sb),
-    // Latest compliance
-    fetchJson(`${SUPABASE_URL}/rest/v1/compliance_records?select=*&order=report_month.desc&limit=1`, sb),
-    // Last 3 months financials for YTD/trend
-    fetchJson(`${SUPABASE_URL}/rest/v1/financials_monthly?select=report_month,rev_total,net_profit,gross_margin_pct&order=report_month.desc&limit=3`, sb),
+async function fetchMetrics() {
+  // Get last 3 months of financials for trend
+  const [financials, debtors, compliance, alerts] = await Promise.all([
+    supabaseGet('financials_monthly?select=report_month,rev_total,gross_profit,gross_margin_pct,net_profit,net_margin_pct&order=report_month.desc&limit=3'),
+    supabaseGet('debtors_monthly?select=report_month,debtor_name,total_outstanding,overdue_30,overdue_60,overdue_90plus&order=report_month.desc&limit=20'),
+    supabaseGet('compliance_records?select=report_month,epa_expiry_date,insurance_expiry_date,vehicle_rego_current,asbestos_jobs,asbestos_docs_complete&order=report_month.desc&limit=1'),
+    supabaseGet('alerts_log?select=severity,category,message,created_at&order=created_at.desc&limit=15'),
   ])
 
-  const latestFin = financials?.[0] || null
-  const latestCompliance = compliance?.[0] || null
-  const latestMonth = latestFin?.report_month?.slice(0, 7) || 'N/A'
+  return { financials, debtors, compliance, alerts }
+}
 
-  // Summarise overdue debtors
-  const latestMonthDebtors = debtors?.filter(d => d.report_month?.startsWith(latestMonth)) || []
-  const overdueTotal = latestMonthDebtors.reduce((s, d) =>
-    s + parseFloat(d.bucket_30 || 0) + parseFloat(d.bucket_60 || 0) + parseFloat(d.bucket_90 || 0), 0)
-  const topOverdue = latestMonthDebtors
-    .filter(d => (parseFloat(d.bucket_30 || 0) + parseFloat(d.bucket_60 || 0) + parseFloat(d.bucket_90 || 0)) > 0)
-    .sort((a, b) => (parseFloat(b.bucket_60 || 0) + parseFloat(b.bucket_90 || 0)) - (parseFloat(a.bucket_60 || 0) + parseFloat(a.bucket_90 || 0)))
-    .slice(0, 5)
+function buildMetricsSummary(metrics) {
+  const { financials, debtors, compliance, alerts } = metrics
+  const lines = []
 
-  // Compliance expiries in the next 30 days
-  const today = new Date()
-  const in30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000)
-  const expiryFields = [
-    { key: 'public_liability_expiry', label: 'Public Liability' },
-    { key: 'workers_comp_expiry', label: "Workers' Comp" },
-    { key: 'epa_renewal_date', label: 'EPA Licence' },
-  ]
-  const upcomingExpiries = []
-  if (latestCompliance) {
-    expiryFields.forEach(({ key, label }) => {
-      const expiry = latestCompliance[key]
-      if (expiry) {
-        const d = new Date(expiry)
-        if (d <= in30Days) {
-          upcomingExpiries.push({ label, date: expiry, daysUntil: Math.round((d - today) / 86400000) })
-        }
-      }
+  // Revenue trends
+  if (financials && financials.length > 0) {
+    lines.push('=== REVENUE TREND (latest 3 months) ===')
+    financials.forEach(f => {
+      const month = f.report_month ? f.report_month.slice(0, 7) : 'Unknown'
+      lines.push(`${month}: Revenue $${Math.round(f.rev_total || 0).toLocaleString('en-AU')} | GP ${(f.gross_margin_pct || 0).toFixed(1)}% | Net Profit $${Math.round(f.net_profit || 0).toLocaleString('en-AU')} (${(f.net_margin_pct || 0).toFixed(1)}%)`)
     })
-  }
-
-  // Build context string for Claude
-  const contextLines = [
-    `=== BINNED-IT WEEKLY BUSINESS DIGEST — Week of ${today.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} ===`,
-    '',
-    `LATEST MONTH (${latestMonth}):`,
-    latestFin ? [
-      `  Revenue: $${Math.round(latestFin.rev_total || 0).toLocaleString('en-AU')}`,
-      `  Gross Profit: $${Math.round(latestFin.gross_profit || 0).toLocaleString('en-AU')} (${(latestFin.gross_margin_pct || 0).toFixed(1)}% GM)`,
-      `  Net Profit: $${Math.round(latestFin.net_profit || 0).toLocaleString('en-AU')}`,
-    ].join('\n') : '  No data available',
-    '',
-    'REVENUE TREND (last 3 months):',
-    ...(ytdRows || []).map(r =>
-      `  ${r.report_month?.slice(0, 7)}: Revenue $${Math.round(r.rev_total || 0).toLocaleString('en-AU')} | NP $${Math.round(r.net_profit || 0).toLocaleString('en-AU')} | GM ${(r.gross_margin_pct || 0).toFixed(1)}%`
-    ),
-    '',
-    `OVERDUE DEBTORS — Total: $${Math.round(overdueTotal).toLocaleString('en-AU')}`,
-    topOverdue.length ? topOverdue.map(d =>
-      `  ${d.customer_name}: 30-60d $${Math.round(parseFloat(d.bucket_30 || 0)).toLocaleString('en-AU')} | 60-90d $${Math.round(parseFloat(d.bucket_60 || 0)).toLocaleString('en-AU')} | 90d+ $${Math.round(parseFloat(d.bucket_90 || 0)).toLocaleString('en-AU')}`
-    ).join('\n') : '  No overdue debtors',
-    '',
-    'COMPLIANCE EXPIRIES (next 30 days):',
-    upcomingExpiries.length
-      ? upcomingExpiries.map(e => `  ⚠️ ${e.label}: expires ${e.date} (${e.daysUntil} days)`).join('\n')
-      : '  None — all current',
-  ].join('\n')
-
-  // Ask Claude for analysis
-  let aiAnalysis = ''
-  try {
-    const aiRes = await fetch(ANTHROPIC_API, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 800,
-        messages: [{
-          role: 'user',
-          content: `You are preparing a weekly business digest for Mark Beddoe, owner of Binned-IT Pty Ltd operating via SkipSync (skip bin hire, Seaford Melbourne).
-
-${contextLines}
-
-Write a concise weekly digest in plain text (not markdown). Include:
-1. A 2-sentence business health summary
-2. Top 2-3 action items for the week (prioritised)
-3. Any risks that need immediate attention
-4. One positive trend or win to acknowledge
-
-Keep it under 250 words. Be direct and practical — Mark is busy.`,
-        }],
-      }),
-    })
-    if (aiRes.ok) {
-      const aiData = await aiRes.json()
-      aiAnalysis = aiData.content?.[0]?.text || ''
+    if (financials.length >= 2) {
+      const latest = financials[0]
+      const prev = financials[1]
+      const revChange = prev.rev_total > 0 ? ((latest.rev_total / prev.rev_total) - 1) * 100 : 0
+      const npChange = (latest.net_profit || 0) - (prev.net_profit || 0)
+      lines.push(`Month-on-month revenue: ${revChange >= 0 ? '+' : ''}${revChange.toFixed(1)}%`)
+      lines.push(`Net profit change: ${npChange >= 0 ? '+' : ''}$${Math.round(Math.abs(npChange)).toLocaleString('en-AU')} ${npChange >= 0 ? 'improvement' : 'decline'}`)
     }
-  } catch {
-    aiAnalysis = 'AI analysis unavailable this week — check dashboard manually.'
+    lines.push('')
   }
 
-  // Build HTML email
-  const overdueRow = overdueTotal > 0
-    ? `<tr><td style="padding:8px;color:#C96B6B;font-weight:700">⚠ Overdue AR</td><td style="padding:8px">$${Math.round(overdueTotal).toLocaleString('en-AU')}</td></tr>`
-    : `<tr><td style="padding:8px;color:#5E9E78">✓ Overdue AR</td><td style="padding:8px">$0 — all clear</td></tr>`
+  // Overdue AR
+  if (debtors && debtors.length > 0) {
+    const latestMonth = debtors[0].report_month
+    const monthDebtors = debtors.filter(d => d.report_month === latestMonth)
+    const totalOverdue = monthDebtors.reduce((s, d) => s + (d.overdue_30 || 0) + (d.overdue_60 || 0) + (d.overdue_90plus || 0), 0)
+    const over90 = monthDebtors.reduce((s, d) => s + (d.overdue_90plus || 0), 0)
+    const topOverdue = monthDebtors
+      .filter(d => (d.overdue_30 + d.overdue_60 + d.overdue_90plus) > 0)
+      .sort((a, b) => (b.total_outstanding - a.total_outstanding))
+      .slice(0, 5)
 
-  const html = `<!DOCTYPE html>
-<html>
-<body style="font-family:Arial,sans-serif;color:#333;max-width:640px;margin:0 auto;padding:20px;background:#f5f5f5">
-  <div style="background:#000;padding:20px 24px;border-radius:8px 8px 0 0;display:flex;align-items:center;gap:16px">
-    <img src="https://binnedit-hub.vercel.app/logo.jpg" alt="SkipSync" style="height:40px;border-radius:4px" />
-    <div>
-      <div style="color:#EFDF0F;font-size:16px;font-weight:700">SkipSync Weekly Digest</div>
-      <div style="color:#aaa;font-size:12px">${today.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
-    </div>
-  </div>
+    lines.push('=== ACCOUNTS RECEIVABLE ===')
+    lines.push(`Total overdue: $${Math.round(totalOverdue).toLocaleString('en-AU')}`)
+    lines.push(`90+ days overdue: $${Math.round(over90).toLocaleString('en-AU')}`)
+    if (topOverdue.length > 0) {
+      lines.push('Top debtors:')
+      topOverdue.forEach(d => {
+        const owed = (d.overdue_30 || 0) + (d.overdue_60 || 0) + (d.overdue_90plus || 0)
+        lines.push(`  - ${d.debtor_name}: $${Math.round(owed).toLocaleString('en-AU')} overdue`)
+      })
+    }
+    lines.push('')
+  }
 
-  <div style="background:#fff;padding:24px;border:1px solid #ddd;border-top:none">
+  // Compliance expiries
+  if (compliance && compliance.length > 0) {
+    const c = compliance[0]
+    lines.push('=== COMPLIANCE STATUS ===')
+    if (c.epa_expiry_date) {
+      const daysToEpa = Math.round((new Date(c.epa_expiry_date) - new Date()) / 86400000)
+      lines.push(`EPA licence expiry: ${c.epa_expiry_date} (${daysToEpa} days)`)
+    }
+    if (c.insurance_expiry_date) {
+      const daysToIns = Math.round((new Date(c.insurance_expiry_date) - new Date()) / 86400000)
+      lines.push(`Insurance expiry: ${c.insurance_expiry_date} (${daysToIns} days)`)
+    }
+    lines.push(`Vehicle rego current: ${c.vehicle_rego_current ? 'Yes' : 'No'}`)
+    lines.push(`Asbestos jobs (last month): ${c.asbestos_jobs || 0} — docs complete: ${c.asbestos_docs_complete ? 'Yes' : 'No'}`)
+    lines.push('')
+  }
 
-    <h2 style="font-size:14px;color:#2D2640;text-transform:uppercase;letter-spacing:0.05em;margin:0 0 16px">
-      AI Analysis
-    </h2>
-    <div style="background:#f8f7fb;border-left:3px solid #7B8FD4;padding:16px;border-radius:4px;font-size:14px;line-height:1.6;white-space:pre-wrap">${aiAnalysis}</div>
+  // Active alerts
+  if (alerts && alerts.length > 0) {
+    lines.push('=== ACTIVE ALERTS ===')
+    const critical = alerts.filter(a => a.severity === 'critical')
+    const warnings = alerts.filter(a => a.severity === 'warning')
+    if (critical.length > 0) {
+      lines.push(`CRITICAL (${critical.length}):`)
+      critical.forEach(a => lines.push(`  - [${a.category}] ${a.message}`))
+    }
+    if (warnings.length > 0) {
+      lines.push(`WARNINGS (${warnings.length}):`)
+      warnings.slice(0, 5).forEach(a => lines.push(`  - [${a.category}] ${a.message}`))
+    }
+    lines.push('')
+  }
 
-    <h2 style="font-size:14px;color:#2D2640;text-transform:uppercase;letter-spacing:0.05em;margin:24px 0 12px">
-      Latest Month — ${latestMonth}
-    </h2>
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <tr style="background:#f8f7fb">
-        <td style="padding:8px">Revenue</td>
-        <td style="padding:8px;font-weight:700">$${Math.round(latestFin?.rev_total || 0).toLocaleString('en-AU')}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px">Gross Profit</td>
-        <td style="padding:8px">$${Math.round(latestFin?.gross_profit || 0).toLocaleString('en-AU')} (${(latestFin?.gross_margin_pct || 0).toFixed(1)}% GM)</td>
-      </tr>
-      <tr style="background:#f8f7fb">
-        <td style="padding:8px">Net Profit</td>
-        <td style="padding:8px;color:${(latestFin?.net_profit || 0) >= 0 ? '#5E9E78' : '#C96B6B'};font-weight:700">
-          $${Math.round(latestFin?.net_profit || 0).toLocaleString('en-AU')}
-        </td>
-      </tr>
-      ${overdueRow}
-    </table>
+  return lines.join('\n')
+}
 
-    ${topOverdue.length > 0 ? `
-    <h2 style="font-size:14px;color:#2D2640;text-transform:uppercase;letter-spacing:0.05em;margin:24px 0 12px">
-      Top Overdue Accounts
-    </h2>
-    <table style="width:100%;border-collapse:collapse;font-size:12px">
-      <tr style="border-bottom:2px solid #eee;color:#888;font-size:11px;text-transform:uppercase">
-        <th style="padding:6px;text-align:left">Customer</th>
-        <th style="padding:6px;text-align:right">30-60d</th>
-        <th style="padding:6px;text-align:right">60-90d</th>
-        <th style="padding:6px;text-align:right">90d+</th>
-      </tr>
-      ${topOverdue.map((d, i) => `
-      <tr style="border-bottom:1px solid #eee;background:${i % 2 ? '#f8f7fb' : '#fff'}">
-        <td style="padding:6px">${d.customer_name}</td>
-        <td style="padding:6px;text-align:right">$${Math.round(parseFloat(d.bucket_30 || 0)).toLocaleString('en-AU')}</td>
-        <td style="padding:6px;text-align:right;color:${parseFloat(d.bucket_60 || 0) > 0 ? '#C96B6B' : '#333'}">$${Math.round(parseFloat(d.bucket_60 || 0)).toLocaleString('en-AU')}</td>
-        <td style="padding:6px;text-align:right;color:${parseFloat(d.bucket_90 || 0) > 0 ? '#C96B6B' : '#333'};font-weight:${parseFloat(d.bucket_90 || 0) > 0 ? 700 : 400}">$${Math.round(parseFloat(d.bucket_90 || 0)).toLocaleString('en-AU')}</td>
-      </tr>`).join('')}
-    </table>` : ''}
+async function getAIAnalysis(metricsSummary) {
+  const today = new Date().toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Australia/Melbourne' })
 
-    ${upcomingExpiries.length > 0 ? `
-    <div style="background:#fff8f0;border:1px solid #f0c08a;border-radius:6px;padding:14px;margin-top:20px">
-      <div style="font-size:13px;font-weight:700;color:#b85c00;margin-bottom:8px">⚠ Compliance Expiries (next 30 days)</div>
-      ${upcomingExpiries.map(e => `<div style="font-size:13px;margin:4px 0">${e.label}: <strong>${e.date}</strong> (${e.daysUntil} days)</div>`).join('')}
-    </div>` : ''}
-
-    <div style="margin-top:24px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center">
-      <a href="https://binnedit-hub.vercel.app" style="color:#EFDF0F">Open SkipSync</a> ·
-      Binned-IT Pty Ltd · Seaford, Melbourne · Auto-generated weekly digest
-    </div>
-  </div>
-</body>
-</html>`
-
-  // Send via Resend
-  const sendRes = await fetch(RESEND_API, {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1200,
+      messages: [
+        {
+          role: 'user',
+          content: `You are a financial advisor for Binned-IT Pty Ltd, a skip bin hire business in Seaford, Melbourne. Today is ${today}.
+
+Here is the latest business data:
+
+${metricsSummary}
+
+Write a concise weekly business digest for the owner Mark. Structure it as:
+
+1. **Business Health This Week** — 2-3 sentences on overall performance
+2. **Revenue & Profitability** — key observations and trends (2-3 bullet points)
+3. **Cash Flow Watch** — overdue AR, top collection priorities (2-3 bullet points)
+4. **Compliance Alerts** — anything urgent or expiring soon (bullet points, or "All clear" if none)
+5. **3 Actions for This Week** — specific, practical priorities Mark should focus on
+
+Be direct and practical. Mark is a busy operator — no fluff. Use Australian business context (GST, ATO, EPA). Keep the whole response under 400 words.`,
+        },
+      ],
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Anthropic API error ${res.status}: ${err}`)
+  }
+
+  const data = await res.json()
+  return data.content?.[0]?.text || 'Analysis unavailable.'
+}
+
+function buildEmailHtml(aiAnalysis, metricsSummary, generatedAt) {
+  // Convert markdown-style bold and bullets to HTML
+  const formatted = aiAnalysis
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^(\d+\.\s+<strong>.*<\/strong>)/gm, '<h3 style="margin:18px 0 6px;color:#2D2640;font-family:Georgia,serif;font-size:15px;">$1</h3>')
+    .replace(/^- (.*)/gm, '<li style="margin:4px 0;color:#3a3450;">$1</li>')
+    .replace(/(<li.*<\/li>\n?)+/g, '<ul style="margin:6px 0 10px 18px;padding:0;">$&</ul>')
+    .replace(/\n\n/g, '</p><p style="margin:8px 0;color:#3a3450;line-height:1.6;">')
+    .replace(/^(?!<[hul])(.+)$/gm, '<p style="margin:8px 0;color:#3a3450;line-height:1.6;">$1</p>')
+
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>BinnedIT Weekly Digest</title></head>
+<body style="margin:0;padding:0;background:#D8D5E0;font-family:'DM Sans',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#D8D5E0;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+        <!-- Header -->
+        <tr>
+          <td style="background:#000000;padding:24px 32px;border-radius:10px 10px 0 0;">
+            <div style="font-family:'Oswald',Georgia,sans-serif;font-size:22px;font-weight:700;color:#7B8FD4;text-transform:uppercase;letter-spacing:0.08em;">
+              BinnedIT HUB
+            </div>
+            <div style="font-size:13px;color:#888;margin-top:4px;">Weekly Business Digest</div>
+            <div style="font-size:12px;color:#666;margin-top:2px;">${generatedAt}</div>
+          </td>
+        </tr>
+
+        <!-- AI Analysis -->
+        <tr>
+          <td style="background:#ffffff;padding:28px 32px;">
+            <div style="font-family:'Oswald',Georgia,sans-serif;font-size:13px;font-weight:700;color:#7B8FD4;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:16px;">
+              AI BUSINESS ANALYSIS
+            </div>
+            <div style="font-size:14px;line-height:1.7;color:#2D2640;">
+              ${formatted}
+            </div>
+          </td>
+        </tr>
+
+        <!-- Raw Metrics -->
+        <tr>
+          <td style="background:#f5f4f8;padding:20px 32px;border-top:1px solid #ddd;">
+            <div style="font-family:'Oswald',Georgia,sans-serif;font-size:12px;font-weight:700;color:#8E87A0;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">
+              DATA SNAPSHOT
+            </div>
+            <pre style="font-size:11px;color:#5A5270;line-height:1.6;white-space:pre-wrap;margin:0;font-family:'Courier New',monospace;">${metricsSummary.trim()}</pre>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#000000;padding:16px 32px;border-radius:0 0 10px 10px;text-align:center;">
+            <div style="font-size:11px;color:#555;">
+              Auto-generated by BinnedIT Hub · <a href="https://binnedit-hub.vercel.app" style="color:#7B8FD4;text-decoration:none;">binnedit-hub.vercel.app</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+}
+
+async function sendEmail(subject, html) {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${RESEND_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: FROM_EMAIL,
+      from: DIGEST_FROM,
       to: [DIGEST_TO],
-      subject: `SkipSync Weekly Digest — ${today.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`,
+      subject,
       html,
     }),
   })
 
-  const sendData = await sendRes.json()
-  if (!sendRes.ok) {
-    return new Response(JSON.stringify({ error: 'Email send failed', details: sendData }), { status: 502 })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Resend error ${res.status}: ${err}`)
   }
 
-  return new Response(
-    JSON.stringify({ ok: true, emailId: sendData.id, month: latestMonth, overdueTotal: Math.round(overdueTotal) }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } }
-  )
+  return res.json()
+}
+
+export default async function handler(req, res) {
+  // Verify cron secret (Vercel sets Authorization: Bearer {CRON_SECRET})
+  const authHeader = req.headers['authorization']
+  const cronSecret = process.env.CRON_SECRET
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set' })
+  if (!SUPABASE_KEY) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY not set' })
+  if (!RESEND_KEY) return res.status(500).json({ error: 'RESEND_API_KEY not set' })
+
+  try {
+    // 1. Fetch metrics from Supabase
+    const metrics = await fetchMetrics()
+    const metricsSummary = buildMetricsSummary(metrics)
+
+    // 2. Get AI analysis
+    const aiAnalysis = await getAIAnalysis(metricsSummary)
+
+    // 3. Build and send email
+    const generatedAt = new Date().toLocaleString('en-AU', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Melbourne',
+    })
+    const weekLabel = new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Australia/Melbourne' })
+    const html = buildEmailHtml(aiAnalysis, metricsSummary, generatedAt)
+
+    await sendEmail(`BinnedIT Weekly Digest — ${weekLabel}`, html)
+
+    return res.status(200).json({ ok: true, generatedAt })
+  } catch (err) {
+    console.error('Weekly digest error:', err)
+    return res.status(500).json({ error: err.message })
+  }
 }
