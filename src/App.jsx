@@ -543,10 +543,9 @@ export default function App() {
         <Route path="/dispatch" element={<DispatchBoard />} />
         <Route path="/history" element={<HistoryScreen />} />
         <Route path="/reports" element={<ReportsScreen />} />
-        <Route path="/dispatch" element={<ComingSoonPage title="Dispatch" icon="📡" desc="Real-time job dispatch, driver assignment, and route optimisation." />} />
         <Route path="/bookings" element={<ComingSoonPage title="Bookings" icon="📅" desc="Manage all bin hire bookings, schedule pickups, and track job status." />} />
         <Route path="/customers" element={<ComingSoonPage title="Customers" icon="👥" desc="Customer accounts, job history, account balances, and communications." />} />
-        <Route path="/drivers" element={<ComingSoonPage title="Drivers" icon="👷" desc="Driver profiles, licences, compliance, and daily job assignments." />} />
+        <Route path="/drivers" element={<Navigate to="/driver" replace />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/about" element={<AboutScreen />} />
         <Route path="*" element={<Navigate to="/home" replace />} />

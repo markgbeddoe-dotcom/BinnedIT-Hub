@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import LoginPage from './components/LoginPage'
 import InvestorView from './components/InvestorView'
 import BookingPage from './components/BookingPage'
+import DriverApp from './components/driver/DriverApp'
 import { queryClient } from './hooks/queryClient'
 
 function AuthGate() {
@@ -15,6 +16,9 @@ function AuthGate() {
 
   // Public routes — no auth required
   if (location.pathname === '/book') return <BookingPage />
+
+  // Driver portal — handles its own auth internally
+  if (location.pathname.startsWith('/driver')) return <DriverApp />
 
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#D8D5E0', color:'#1A1A1A', fontFamily:'DM Sans, sans-serif', fontSize:16 }}>
