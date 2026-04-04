@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { B, fontHead, fontBody } from '../theme';
 import { SectionHeader } from './UIComponents';
 import { getAlertThresholds, upsertThreshold, getProfiles, updateProfileRole, getBinTypes, upsertBinType, inviteUser } from '../api/settings';
@@ -14,6 +15,7 @@ const iStyle = {
 
 export default function SettingsPage() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { isOwner, isManager } = useAuth();
 
   const { data: thresholds = [], isLoading: thresholdsLoading } = useQuery({
@@ -139,6 +141,30 @@ export default function SettingsPage() {
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '40px 24px' }}>
       <SectionHeader title="Settings" subtitle="Alert thresholds, users, bin types, and company info" />
+
+      {/* ── Sub-page navigation ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12, marginBottom: 24 }}>
+        {[
+          { id: 'team', icon: '👥', title: 'Team & Staff', desc: 'Manage roles, profiles, and staff certifications', path: '/settings/team', color: B.blue },
+          { id: 'audit', icon: '📋', title: 'Audit Log', desc: 'Immutable record of all system changes', path: '/settings/audit', color: B.purple },
+        ].map(card => (
+          <button
+            key={card.id}
+            onClick={() => navigate(card.path)}
+            style={{
+              background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 10,
+              padding: '18px 20px', cursor: 'pointer', textAlign: 'left',
+              borderLeft: `4px solid ${card.color}`, display: 'flex', flexDirection: 'column', gap: 4,
+            }}
+            onMouseOver={e => { e.currentTarget.style.background = B.cardBgHover }}
+            onMouseOut={e => { e.currentTarget.style.background = B.cardBg }}
+          >
+            <div style={{ fontSize: 22 }}>{card.icon}</div>
+            <div style={{ fontFamily: fontHead, fontSize: 13, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase' }}>{card.title}</div>
+            <div style={{ fontSize: 11, color: B.textMuted }}>{card.desc}</div>
+          </button>
+        ))}
+      </div>
 
       {/* Alert Thresholds */}
       <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>

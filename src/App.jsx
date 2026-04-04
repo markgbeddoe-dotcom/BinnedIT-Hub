@@ -33,6 +33,9 @@ import InvoicesPage from './components/InvoicesPage';
 import CustomersPage from './components/CustomersPage';
 import FleetManagementPage from './components/FleetManagementPage';
 import PricingTab from './components/PricingTab';
+import AuditLogPage from './components/AuditLogPage';
+import TeamPage from './components/TeamPage';
+import NotificationBell from './components/NotificationBell';
 
 // React Query hooks
 import { useAvailableMonths } from './hooks/useMonthData';
@@ -131,7 +134,7 @@ export default function App() {
     : location.pathname === '/wizard' || location.pathname === '/month-select' ? 'wizard'
     : location.pathname === '/fleet-assets' ? 'fleet-assets'
     : location.pathname === '/fleet' ? 'fleet'
-    : location.pathname === '/settings' ? 'settings'
+    : location.pathname.startsWith('/settings') ? 'settings'
     : location.pathname === '/history' ? 'history'
     : location.pathname === '/reports' ? 'reports'
     : location.pathname === '/about' ? 'about'
@@ -275,6 +278,7 @@ export default function App() {
       {currentScreen==='dashboard' && !isMobile && (
         <PDFExport monthLabel={selLabel} />
       )}
+      <NotificationBell />
       {currentScreen !== 'home' && (
         <button onClick={goHome} style={{background:'none',border:'1px solid #555',color:B.yellow,
           padding: isMobile ? '4px 10px' : '6px 16px',borderRadius:6,cursor:'pointer',fontFamily:fontHead,
@@ -560,6 +564,8 @@ export default function App() {
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/drivers" element={<ComingSoonPage title="Drivers" icon="👷" desc="Driver profiles, licences, compliance, and daily job assignments." />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings/audit" element={<AuditLogPage />} />
+        <Route path="/settings/team" element={<TeamPage />} />
         <Route path="/about" element={<AboutScreen />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
