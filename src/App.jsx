@@ -30,6 +30,9 @@ import PDFExport from './components/PDFExport';
 import InvestorView from './components/InvestorView';
 import DispatchBoard from './components/DispatchBoard';
 import InvoicesPage from './components/InvoicesPage';
+import CustomersPage from './components/CustomersPage';
+import FleetManagementPage from './components/FleetManagementPage';
+import PricingTab from './components/PricingTab';
 
 // React Query hooks
 import { useAvailableMonths } from './hooks/useMonthData';
@@ -51,17 +54,18 @@ const tiles = [
   { id:"dispatch", icon:"🗂️", title:"Dispatch", desc:"Kanban job management & scheduling", sub:"Drag & drop board", color:B.yellow },
   { id:"bookings", icon:"📅", title:"Bookings", desc:"Manage bin hire bookings & schedules", sub:"Operations", color:B.blue },
   { id:"invoices", icon:"🧾", title:"Invoices", desc:"Auto-generated invoices, payment tracking & chasing", sub:"Finance", color:B.green },
+  { id:"customers", icon:"👥", title:"Customers", desc:"CRM — accounts, job history & churn risk", sub:"10 accounts loaded", color:B.cyan },
+  { id:"fleet", icon:"🚛", title:"Fleet", desc:"Vehicles, bin inventory & maintenance log", sub:"Jake's operations module", color:B.amber },
   { id:"dashboard", icon:"📊", title:"Financial Reports", desc:"Current month's P&L, KPIs and analysis", sub:"Select month to view", color:B.purple },
-  { id:"fleet-assets", icon:"🚛", title:"Fleet", desc:"Trucks, bins, maintenance records", sub:"Jake's operations module", color:B.amber },
   { id:"generate", icon:"🔧", title:"Load Data", desc:"12-step guided wizard", sub:"Upload files + manual input", color:B.purple },
   { id:"settings", icon:"⚙️", title:"Settings", desc:"Alert rules, competitors, thresholds", sub:"Configure platform", color:B.textMuted },
 ];
 
 const dashTabs = [
   {id:"snapshot",label:"SNAPSHOT"},{id:"revenue",label:"REVENUE"},{id:"margins",label:"MARGINS"},
-  {id:"benchmarking",label:"BENCHMARKING"},{id:"competitors",label:"COMPETITORS"},{id:"bdm",label:"BDM"},
-  {id:"fleet",label:"FLEET"},{id:"debtors",label:"DEBTORS"},{id:"cashflow",label:"CASH FLOW"},
-  {id:"risk",label:"RISK / EPA"},{id:"workplan",label:"WORK PLAN"},
+  {id:"benchmarking",label:"BENCHMARKING"},{id:"competitors",label:"COMPETITORS"},{id:"pricing",label:"PRICING"},
+  {id:"bdm",label:"BDM"},{id:"fleet",label:"FLEET"},{id:"debtors",label:"DEBTORS"},
+  {id:"cashflow",label:"CASH FLOW"},{id:"risk",label:"RISK / EPA"},{id:"workplan",label:"WORK PLAN"},
 ];
 
 // Operations-first nav order
@@ -69,7 +73,7 @@ const menuItems = [
   // Operations section
   {id:'dispatch',icon:'🗂️',label:'Dispatch',section:'OPERATIONS'},
   {id:'bookings',icon:'📅',label:'Bookings',section:null},
-  {id:'fleet-assets',icon:'🚛',label:'Fleet',section:null},
+  {id:'fleet',icon:'🚛',label:'Fleet',section:null},
   {id:'drivers',icon:'👷',label:'Drivers',section:null},
   {id:'customers',icon:'👥',label:'Customers',section:null},
   {id:'invoices',icon:'🧾',label:'Invoices',section:null},
@@ -126,6 +130,7 @@ export default function App() {
     : location.pathname.startsWith('/dashboard') ? 'dashboard'
     : location.pathname === '/wizard' || location.pathname === '/month-select' ? 'wizard'
     : location.pathname === '/fleet-assets' ? 'fleet-assets'
+    : location.pathname === '/fleet' ? 'fleet'
     : location.pathname === '/settings' ? 'settings'
     : location.pathname === '/history' ? 'history'
     : location.pathname === '/reports' ? 'reports'
@@ -292,6 +297,7 @@ export default function App() {
             else if (t.id==='generate'||t.id==='update') { navigate('/month-select'); }
             else if (t.id==='fleet-assets') { navigate('/fleet-assets'); }
             else if (t.id==='dispatch') { navigate('/dispatch'); }
+            else if (t.id==='fleet') { navigate('/fleet'); }
             else navigate(`/${t.id}`);
           }} style={{background:B.cardBg,border:`1px solid ${B.cardBorder}`,borderRadius:14,padding:'28px 24px',
             cursor:'pointer',textAlign:'left',borderLeft:`4px solid ${t.color}`,display:'flex',flexDirection:'column',gap:6,transition:'all 0.2s'}}
@@ -383,6 +389,7 @@ export default function App() {
           {dashTab === 'margins'       && <MarginsTab       {...tabProps} />}
           {dashTab === 'benchmarking'  && <BenchmarkingTab  {...tabProps} />}
           {dashTab === 'competitors'   && <CompetitorsTab   {...tabProps} onBack={()=>setDashTab('snapshot')} />}
+          {dashTab === 'pricing'       && <PricingTab       monthIndex={availableMonths.findIndex(m=>m.key===selectedMonth)} monthLabel={selLabel} />}
           {dashTab === 'bdm'           && <BDMTab           {...tabProps} />}
           {dashTab === 'fleet'         && <FleetTab         {...tabProps} />}
           {dashTab === 'debtors'       && <DebtorsTab       {...tabProps} />}
@@ -544,13 +551,14 @@ export default function App() {
         <Route path="/month-select" element={<MonthSelect />} />
         <Route path="/wizard" element={<Wizard onComplete={handleWizardComplete} onHome={goHome} selectedMonth={selectedMonth} />} />
         <Route path="/fleet-assets" element={<FleetAssetsTab />} />
+        <Route path="/fleet" element={<FleetManagementPage />} />
         <Route path="/dispatch" element={<DispatchBoard />} />
         <Route path="/history" element={<HistoryScreen />} />
         <Route path="/reports" element={<ReportsScreen />} />
         <Route path="/bookings" element={<ComingSoonPage title="Bookings" icon="📅" desc="Manage all bin hire bookings, schedule pickups, and track job status." />} />
         <Route path="/invoices" element={<InvoicesPage />} />
-        <Route path="/customers" element={<ComingSoonPage title="Customers" icon="👥" desc="Customer accounts, job history, account balances, and communications." />} />
-        <Route path="/drivers" element={<Navigate to="/driver" replace />} />
+        <Route path="/customers" element={<CustomersPage />} />
+        <Route path="/drivers" element={<ComingSoonPage title="Drivers" icon="👷" desc="Driver profiles, licences, compliance, and daily job assignments." />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/about" element={<AboutScreen />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
