@@ -165,3 +165,16 @@ export const dormantCustomers = [
   {name:"SALVAGE CONSTRUCTIONS",lastJob:"Aug 2025",totalYTD:2134,type:"Demolition",aging:"Older"},
   {name:"SUMMITSTRUCT PTY LTD",lastJob:"Jul 2025",totalYTD:616,type:"Builder",aging:"Older"},
 ];
+
+// Churn risk: customers with >40% drop in order frequency (recent 2 months vs prior 4 months avg)
+// avgPrior = avg jobs/month over Jul–Oct 2025; avgRecent = avg jobs/month Nov–Feb 2026; drop = %
+export const churnRiskCustomers = [
+  {name:"ALLIED DEMOLITION PTY LTD",type:"Demolition",avgPrior:3.5,avgRecent:1.0,drop:71,revenue:8420,lastJob:"Jan 2026"},
+  {name:"BAYSIDE BUILDING GROUP",type:"Builder",avgPrior:2.8,avgRecent:1.0,drop:64,revenue:5940,lastJob:"Feb 2026"},
+  {name:"PENINSULA WASTE SERVICES",type:"Commercial",avgPrior:4.0,avgRecent:1.5,drop:63,revenue:12100,lastJob:"Jan 2026"},
+  {name:"FRANKSTON TILERS PTY LTD",type:"Trades",avgPrior:2.5,avgRecent:1.0,drop:60,revenue:3870,lastJob:"Jan 2026"},
+  {name:"COASTLINE CONSTRUCTIONS",type:"Builder",avgPrior:3.0,avgRecent:1.5,drop:50,revenue:7650,lastJob:"Feb 2026"},
+  {name:"ELWOOD EXCAVATIONS",type:"Demolition",avgPrior:2.0,avgRecent:1.0,drop:50,revenue:4310,lastJob:"Jan 2026"},
+  {name:"MORNINGTON SKIP HIRE CO",type:"Commercial",avgPrior:5.0,avgRecent:2.5,drop:50,revenue:14250,lastJob:"Feb 2026"},
+  {name:"SEAFORD SHOPFITTERS",type:"Commercial",avgPrior:1.8,avgRecent:1.0,drop:44,revenue:2890,lastJob:"Feb 2026"},
+];
