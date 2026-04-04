@@ -35,6 +35,8 @@ import FleetManagementPage from './components/FleetManagementPage';
 import PricingTab from './components/PricingTab';
 import AuditLogPage from './components/AuditLogPage';
 import TeamPage from './components/TeamPage';
+import BookingPage from './components/BookingPage';
+import DriverApp from './components/driver/DriverApp';
 import NotificationBell from './components/NotificationBell';
 
 // React Query hooks
@@ -563,10 +565,10 @@ export default function App() {
         <Route path="/dispatch" element={<DispatchBoard />} />
         <Route path="/history" element={<HistoryScreen />} />
         <Route path="/reports" element={<ReportsScreen />} />
-        <Route path="/bookings" element={<ComingSoonPage title="Bookings" icon="📅" desc="Manage all bin hire bookings, schedule pickups, and track job status." />} />
+        <Route path="/bookings" element={<BookingPage />} />
         <Route path="/invoices" element={<InvoicesPage />} />
         <Route path="/customers" element={<CustomersPage />} />
-        <Route path="/drivers" element={<ComingSoonPage title="Drivers" icon="👷" desc="Driver profiles, licences, compliance, and daily job assignments." />} />
+        <Route path="/drivers" element={<DriverApp />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/audit" element={<AuditLogPage />} />
         <Route path="/settings/team" element={<TeamPage />} />
