@@ -287,8 +287,7 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
 
   await upsertToSupabase('monthly_reports', {
     report_month: `${month}-01`,
-    status: 'final',
-    data_source: 'xero',
+    status: 'complete',
     updated_at: new Date().toISOString(),
   }, serviceKey)
 
