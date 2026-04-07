@@ -4,7 +4,8 @@
  * Generates an invoice when a booking is marked as completed.
  * - Creates an invoice record in the invoices table
  * - Calculates ex-GST amount, GST (10%), and total from booking price
- * - Optionally creates a draft invoice in Xero (non-blocking)
+ * - Optionally creates a draft invoice in Xero when XERO_WRITE_ENABLED=true
+ *   (defaults to false — set explicitly when ready to enable Xero writes)
  *
  * Request:  POST { booking_id: string }
  * Auth:     Bearer <user JWT>
@@ -12,12 +13,22 @@
  */
 export const config = { runtime: 'edge' }
 
+import { getXeroTokenSilent } from './lib/xero-token.js'
+
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dkjwyzjzdcgrepbgiuei.supabase.co'
 const XERO_API     = 'https://api.xero.com/api.xro/2.0'
 
+// Set XERO_WRITE_ENABLED=true in Vercel env vars when ready to push invoices to Xero.
+// Defaults to false so local invoice creation always works without Xero side-effects.
+const XERO_WRITE_ENABLED = process.env.XERO_WRITE_ENABLED === 'true'
+
+// Revenue account code — update XERO_REVENUE_ACCOUNT_CODE in Vercel env vars to match
+// your Xero chart of accounts if your code differs from the Xero default of 200.
+const XERO_REVENUE_ACCOUNT_CODE = process.env.XERO_REVENUE_ACCOUNT_CODE || '200'
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Generate invoice number: INV-YYYY-NNNNNN */
+/** Generate invoice number: INV-YYYY-NNNNN */
 async function nextInvoiceNumber(serviceKey) {
   const year = new Date().getFullYear()
   const res = await fetch(
@@ -33,49 +44,8 @@ async function nextInvoiceNumber(serviceKey) {
   return `INV-${year}-${String(seq).padStart(5, '0')}`
 }
 
-/** Get Xero access token (returns null if Xero not connected — non-fatal) */
-async function getXeroToken(serviceKey) {
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/xero_tokens?select=*&limit=1`,
-      { headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey } }
-    )
-    const rows = await res.json()
-    if (!rows?.length) return null
-
-    const token = rows[0]
-    const expiresAt = new Date(token.expires_at).getTime()
-    if (expiresAt - Date.now() < 5 * 60 * 1000) {
-      const clientId     = process.env.XERO_CLIENT_ID
-      const clientSecret = process.env.XERO_CLIENT_SECRET
-      if (!clientId || !clientSecret) return null
-      const refreshRes = await fetch('https://identity.xero.com/connect/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-        },
-        body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: token.refresh_token }),
-      })
-      const refreshed = await refreshRes.json()
-      if (!refreshed.access_token) return null
-      const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
-      await fetch(`${SUPABASE_URL}/rest/v1/xero_tokens?tenant_id=eq.${encodeURIComponent(token.tenant_id)}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ access_token: refreshed.access_token, refresh_token: refreshed.refresh_token || token.refresh_token, expires_at: newExpiry, updated_at: new Date().toISOString() }),
-      })
-      return { accessToken: refreshed.access_token, tenantId: token.tenant_id }
-    }
-    return { accessToken: token.access_token, tenantId: token.tenant_id }
-  } catch {
-    return null
-  }
-}
-
 /** Create a draft invoice in Xero; returns xero_invoice_id or null */
 async function createXeroInvoice(accessToken, tenantId, invoice, booking) {
-  const dueDate = invoice.due_date
   const xeroPayload = {
     Invoices: [{
       Type: 'ACCREC',
@@ -88,11 +58,11 @@ async function createXeroInvoice(accessToken, tenantId, invoice, booking) {
           + (booking.address ? ` @ ${booking.address}, ${booking.suburb || ''}`.trim() : ''),
         Quantity: 1,
         UnitAmount: parseFloat(invoice.amount),
-        AccountCode: '200',   // Revenue account — update to match your Xero chart of accounts
+        AccountCode: XERO_REVENUE_ACCOUNT_CODE,
         TaxType: 'OUTPUT2',   // 10% GST on income (Australian)
       }],
       Date: new Date().toISOString().slice(0, 10),
-      DueDate: dueDate,
+      DueDate: invoice.due_date,
       InvoiceNumber: invoice.invoice_number,
       Reference: booking.id,
       Status: 'DRAFT',
@@ -194,8 +164,8 @@ export default async function handler(req) {
     const invoicePayload = {
       booking_id,
       invoice_number,
-      customer_name:  booking.customer_name,
-      customer_email: booking.customer_email || null,
+      customer_name:    booking.customer_name,
+      customer_email:   booking.customer_email || null,
       amount,
       gst,
       total: totalIncGst,
@@ -217,19 +187,26 @@ export default async function handler(req) {
     const invoices = await insertRes.json()
     const invoice  = Array.isArray(invoices) ? invoices[0] : invoices
 
-    // 7. Try to create Xero invoice (non-blocking — failure doesn't affect response)
-    const xeroToken = await getXeroToken(serviceKey)
-    if (xeroToken) {
-      const xeroId = await createXeroInvoice(xeroToken.accessToken, xeroToken.tenantId, invoice, booking)
-      if (xeroId) {
-        await fetch(`${SUPABASE_URL}/rest/v1/invoices?id=eq.${invoice.id}`, {
-          method: 'PATCH',
-          headers: sbHeaders,
-          body: JSON.stringify({ xero_invoice_id: xeroId, xero_sync_status: 'synced' }),
-        })
-        invoice.xero_invoice_id  = xeroId
-        invoice.xero_sync_status = 'synced'
+    // 7. Optionally create a draft invoice in Xero
+    //    Disabled by default — set XERO_WRITE_ENABLED=true in Vercel env vars to enable.
+    if (XERO_WRITE_ENABLED) {
+      const xeroToken = await getXeroTokenSilent(serviceKey)
+      if (xeroToken) {
+        try {
+          const xeroId = await createXeroInvoice(xeroToken.accessToken, xeroToken.tenantId, invoice, booking)
+          if (xeroId) {
+            await fetch(`${SUPABASE_URL}/rest/v1/invoices?id=eq.${invoice.id}`, {
+              method: 'PATCH',
+              headers: sbHeaders,
+              body: JSON.stringify({ xero_invoice_id: xeroId, xero_sync_status: 'synced' }),
+            })
+            invoice.xero_invoice_id  = xeroId
+            invoice.xero_sync_status = 'synced'
+          }
+        } catch { /* non-fatal — local invoice already created */ }
       }
+    } else {
+      console.log(`[invoice-generate] Xero write disabled — invoice ${invoice_number} created locally only. Set XERO_WRITE_ENABLED=true to push to Xero.`)
     }
 
     return new Response(JSON.stringify({ success: true, invoice }), {
