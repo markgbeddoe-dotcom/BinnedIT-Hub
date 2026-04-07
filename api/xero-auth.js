@@ -20,7 +20,9 @@ export default async function handler(req) {
     'profile',
     'email',
     'offline_access',
-    'accounting.reports.read',
+    'accounting.reports.profitandloss.read',
+    'accounting.reports.balancesheet.read',
+    'accounting.reports.aged.read',
     'accounting.contacts.read',
   ].join(' ')
   const state = crypto.randomUUID()
