@@ -2,6 +2,7 @@
  * @file api/xero-auth.js — Vercel Edge Function
  * Redirects the browser to Xero's OAuth 2.0 authorisation page.
  * Called when the user clicks "Connect Xero" in Settings.
+ * Sets a short-lived CSRF cookie to verify the state on callback.
  */
 export const config = { runtime: 'edge' }
 
@@ -14,7 +15,15 @@ export default async function handler(req) {
   }
 
   const redirectUri = 'https://binnedit-hub.vercel.app/api/xero-callback'
-  const scopes = 'accounting.reports.read accounting.contacts.read offline_access openid profile email'
+  const scopes = [
+    'accounting.reports.read',
+    'accounting.transactions.read',
+    'accounting.contacts.read',
+    'offline_access',
+    'openid',
+    'profile',
+    'email',
+  ].join(' ')
   const state = crypto.randomUUID()
 
   const params = new URLSearchParams({
@@ -26,5 +35,12 @@ export default async function handler(req) {
   })
 
   const xeroAuthUrl = `https://login.xero.com/identity/connect/authorize?${params.toString()}`
-  return Response.redirect(xeroAuthUrl, 302)
+
+  // Store state in a short-lived HttpOnly cookie so xero-callback.js can verify it
+  const headers = new Headers({
+    Location: xeroAuthUrl,
+    'Set-Cookie': `xero_csrf_state=${state}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=600`,
+  })
+
+  return new Response(null, { status: 302, headers })
 }

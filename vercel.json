@@ -1,17 +1,23 @@
 {
   "framework": "vite",
-  "crons": [
-    {
-      "path": "/api/reminders",
-      "schedule": "0 22 * * *"
-    }
-  ],
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "crons": [
     {
+      "path": "/api/reminders",
+      "schedule": "0 8 * * *"
+    },
+    {
       "path": "/api/weekly-digest",
-      "schedule": "0 21 * * 0"
+      "schedule": "0 20 * * 0"
+    },
+    {
+      "path": "/api/invoice-chase",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/xero-payment-sync",
+      "schedule": "0 10 * * *"
     }
   ],
   "rewrites": [
@@ -26,20 +32,6 @@
         { "key": "X-XSS-Protection", "value": "1; mode=block" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
       ]
-    }
-  ],
-  "crons": [
-    {
-      "path": "/api/reminders",
-      "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/weekly-digest",
-      "schedule": "0 20 * * 0"
-    },
-    {
-      "path": "/api/invoice-chase",
-      "schedule": "0 9 * * *"
     }
   ]
 }

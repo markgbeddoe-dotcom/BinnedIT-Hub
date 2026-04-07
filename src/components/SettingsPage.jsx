@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { B, fontHead, fontBody } from '../theme';
 import { SectionHeader } from './UIComponents';
 import { getAlertThresholds, upsertThreshold, getProfiles, updateProfileRole, getBinTypes, upsertBinType, inviteUser } from '../api/settings';
-import { getXeroStatus, syncXeroMonth, getXeroSyncLog } from '../api/xero';
+import { getXeroStatus, syncXeroMonth, syncXeroAllHistory, getXeroSyncLog } from '../api/xero';
 import { useAuth } from '../context/AuthContext';
 
 const iStyle = {
@@ -16,6 +16,7 @@ const iStyle = {
 export default function SettingsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isOwner, isManager } = useAuth();
 
   const { data: thresholds = [], isLoading: thresholdsLoading } = useQuery({
@@ -53,10 +54,15 @@ export default function SettingsPage() {
   const [inviteState, setInviteState] = useState(null); // null | 'sending' | 'success' | 'error'
   const [inviteMsg, setInviteMsg] = useState('');
   const [xeroStatus, setXeroStatus] = useState(null);
+  const [xeroConnectedToast, setXeroConnectedToast] = useState(false);
   const [xeroSyncing, setXeroSyncing] = useState(false);
   const [xeroSyncMonth, setXeroSyncMonth] = useState('2026-02');
   const [xeroSyncResult, setXeroSyncResult] = useState(null);
   const [xeroSyncLog, setXeroSyncLog] = useState([]);
+  const [xeroHistoryFrom, setXeroHistoryFrom] = useState('2025-07');
+  const [xeroHistoryTo, setXeroHistoryTo] = useState('2026-02');
+  const [xeroHistorySyncing, setXeroHistorySyncing] = useState(false);
+  const [xeroHistoryResult, setXeroHistoryResult] = useState(null);
 
   const handleInvite = async (e) => {
     e.preventDefault();
@@ -87,6 +93,19 @@ export default function SettingsPage() {
     setXeroSyncing(false);
   };
 
+  const handleXeroHistorySync = async () => {
+    setXeroHistorySyncing(true);
+    setXeroHistoryResult(null);
+    try {
+      const result = await syncXeroAllHistory(xeroHistoryFrom, xeroHistoryTo);
+      setXeroHistoryResult({ ok: true, data: result });
+      getXeroSyncLog().then(setXeroSyncLog).catch(() => {});
+    } catch (e) {
+      setXeroHistoryResult({ ok: false, error: e.message });
+    }
+    setXeroHistorySyncing(false);
+  };
+
   const [pushStatus, setPushStatus] = useState('checking'); // 'checking'|'unsupported'|'denied'|'subscribed'|'unsubscribed'
   const [pushMsg, setPushMsg] = useState('');
 
@@ -94,6 +113,16 @@ export default function SettingsPage() {
     getXeroStatus().then(setXeroStatus).catch(() => setXeroStatus({ connected: false }));
     getXeroSyncLog().then(setXeroSyncLog).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('xero_connected') === '1') {
+      setXeroConnectedToast(true);
+      // Clean up the query param without triggering a navigation
+      window.history.replaceState({}, '', location.pathname);
+      setTimeout(() => setXeroConnectedToast(false), 6000);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -141,6 +170,20 @@ export default function SettingsPage() {
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '40px 24px' }}>
       <SectionHeader title="Settings" subtitle="Alert thresholds, users, bin types, and company info" />
+
+      {xeroConnectedToast && (
+        <div style={{
+          marginBottom: 20, padding: '14px 18px', borderRadius: 8,
+          background: `${B.green}18`, border: `1px solid ${B.green}50`,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{ fontSize: 18 }}>✓</span>
+          <div>
+            <div style={{ fontFamily: fontHead, fontSize: 13, fontWeight: 700, color: B.green }}>Xero Connected Successfully</div>
+            <div style={{ fontSize: 12, color: B.textSecondary, marginTop: 2 }}>Your Xero organisation is now linked. Use the sync controls below to import your financial data.</div>
+          </div>
+        </div>
+      )}
 
       {/* ── Sub-page navigation ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12, marginBottom: 24 }}>
@@ -433,6 +476,61 @@ export default function SettingsPage() {
                   )}
                 </div>
               )}
+
+              {/* Bulk historical sync */}
+              <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${B.cardBorder}` }}>
+                <div style={{ fontFamily: fontHead, fontSize: 11, fontWeight: 700, color: B.textSecondary, textTransform: 'uppercase', marginBottom: 10 }}>Sync All History</div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 10, color: B.textMuted, marginBottom: 3 }}>From</label>
+                    <select
+                      value={xeroHistoryFrom}
+                      onChange={e => setXeroHistoryFrom(e.target.value)}
+                      style={{ background: B.bg, border: `1px solid ${B.cardBorder}`, borderRadius: 6, padding: '6px 10px', fontSize: 12, color: B.textPrimary, fontFamily: fontBody }}
+                    >
+                      {['2024-07','2024-08','2024-09','2024-10','2024-11','2024-12','2025-01','2025-02','2025-03','2025-04','2025-05','2025-06','2025-07','2025-08','2025-09','2025-10','2025-11','2025-12','2026-01','2026-02','2026-03','2026-04'].map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 10, color: B.textMuted, marginBottom: 3 }}>To</label>
+                    <select
+                      value={xeroHistoryTo}
+                      onChange={e => setXeroHistoryTo(e.target.value)}
+                      style={{ background: B.bg, border: `1px solid ${B.cardBorder}`, borderRadius: 6, padding: '6px 10px', fontSize: 12, color: B.textPrimary, fontFamily: fontBody }}
+                    >
+                      {['2024-07','2024-08','2024-09','2024-10','2024-11','2024-12','2025-01','2025-02','2025-03','2025-04','2025-05','2025-06','2025-07','2025-08','2025-09','2025-10','2025-11','2025-12','2026-01','2026-02','2026-03','2026-04'].map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={handleXeroHistorySync}
+                    disabled={xeroHistorySyncing}
+                    style={{ background: xeroHistorySyncing ? B.cardBorder : B.blue, border: 'none', borderRadius: 6, padding: '8px 18px', cursor: xeroHistorySyncing ? 'wait' : 'pointer', fontFamily: fontHead, fontSize: 11, fontWeight: 700, color: xeroHistorySyncing ? B.textMuted : '#fff', textTransform: 'uppercase', whiteSpace: 'nowrap' }}
+                  >
+                    {xeroHistorySyncing ? 'Syncing...' : 'Sync All History'}
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: B.textMuted, marginTop: 6 }}>
+                  Syncs each month sequentially with a 500 ms delay to respect Xero rate limits.
+                </div>
+                {xeroHistoryResult && (
+                  <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 6, background: xeroHistoryResult.ok ? `${B.blue}12` : `${B.red}15`, border: `1px solid ${xeroHistoryResult.ok ? B.blue : B.red}40` }}>
+                    {xeroHistoryResult.ok ? (
+                      <div style={{ fontSize: 12, color: B.blue }}>
+                        ✓ Bulk sync complete — {xeroHistoryResult.data?.succeeded}/{xeroHistoryResult.data?.synced} months succeeded
+                        {xeroHistoryResult.data?.failed > 0 && (
+                          <span style={{ color: B.amber }}> ({xeroHistoryResult.data.failed} failed — check sync log below)</span>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: B.red }}>✗ {xeroHistoryResult.error}</div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

@@ -18,13 +18,36 @@ export async function syncXeroMonth(month) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
+      Authorization: `Bearer ${session.access_token}`,
     },
     body: JSON.stringify({ month, userId: session.user.id }),
   })
 
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || `Sync failed (${res.status})`)
+  return data
+}
+
+export async function syncXeroAllHistory(fromMonth, toMonth) {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('Not authenticated')
+
+  const res = await fetch('/api/xero-sync', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      action: 'sync_all',
+      from_month: fromMonth,
+      to_month: toMonth,
+      userId: session.user.id,
+    }),
+  })
+
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || `Bulk sync failed (${res.status})`)
   return data
 }
 

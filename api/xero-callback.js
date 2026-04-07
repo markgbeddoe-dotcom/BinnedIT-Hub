@@ -1,8 +1,9 @@
 /**
  * @file api/xero-callback.js — Vercel Edge Function
- * Receives OAuth callback from Xero, exchanges code for tokens,
- * fetches the tenant list, and stores tokens in Supabase.
- * Redirects to /dashboard on success or /?xero_error=... on failure.
+ * Receives OAuth callback from Xero, verifies CSRF state cookie,
+ * exchanges code for tokens, fetches the tenant list, and stores
+ * tokens in Supabase. Redirects to /settings?xero_connected=1
+ * on success or /?xero_error=... on failure.
  */
 export const config = { runtime: 'edge' }
 
@@ -12,9 +13,19 @@ export default async function handler(req) {
   const url = new URL(req.url)
   const code = url.searchParams.get('code')
   const error = url.searchParams.get('error')
+  const receivedState = url.searchParams.get('state')
 
   if (error || !code) {
     return Response.redirect(`https://binnedit-hub.vercel.app/?xero_error=${encodeURIComponent(error || 'no_code')}`, 302)
+  }
+
+  // ── CSRF state verification ───────────────────────────────────────────────────
+  const cookieHeader = req.headers.get('cookie') || ''
+  const stateCookiePart = cookieHeader.split(';').find(c => c.trim().startsWith('xero_csrf_state='))
+  const expectedState = stateCookiePart?.split('=').slice(1).join('=').trim()
+
+  if (!expectedState || !receivedState || expectedState !== receivedState) {
+    return Response.redirect('https://binnedit-hub.vercel.app/?xero_error=csrf_mismatch', 302)
   }
 
   const clientId = process.env.XERO_CLIENT_ID
@@ -32,7 +43,7 @@ export default async function handler(req) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
       },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
@@ -50,7 +61,7 @@ export default async function handler(req) {
   let tenantId, tenantName
   try {
     const connRes = await fetch('https://api.xero.com/connections', {
-      headers: { 'Authorization': `Bearer ${tokens.access_token}` }
+      headers: { Authorization: `Bearer ${tokens.access_token}` }
     })
     const connections = await connRes.json()
     const org = connections[0]
@@ -70,10 +81,10 @@ export default async function handler(req) {
     await fetch(`${SUPABASE_URL}/rest/v1/xero_tokens`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${serviceKey}`,
-        'apikey': serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        apikey: serviceKey,
         'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates',
+        Prefer: 'resolution=merge-duplicates',
       },
       body: JSON.stringify({
         tenant_id: tenantId,
@@ -88,5 +99,10 @@ export default async function handler(req) {
     return Response.redirect('https://binnedit-hub.vercel.app/?xero_error=token_save_failed', 302)
   }
 
-  return Response.redirect('https://binnedit-hub.vercel.app/settings?xero_connected=1', 302)
+  // Clear CSRF cookie and redirect to settings with success flag
+  const headers = new Headers({
+    Location: 'https://binnedit-hub.vercel.app/settings?xero_connected=1',
+    'Set-Cookie': 'xero_csrf_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0',
+  })
+  return new Response(null, { status: 302, headers })
 }
