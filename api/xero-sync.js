@@ -134,30 +134,28 @@ function mapPLToFinancials(sections, month) {
   return {
     report_month: `${month}-01`,
     rev_total: revTotal,
-    rev_general_waste: revGeneralWaste,
+    rev_general: revGeneralWaste,
     rev_asbestos: revAsbestos,
     rev_soil: revSoil,
-    rev_green_waste: revGreenWaste,
+    rev_green: revGreenWaste,
     rev_other: revOther,
     cos_total: cosTotal,
     cos_wages: cosWages,
     cos_fuel: cosFuel,
     cos_repairs: cosRepairs,
-    cos_tipping: cosTipping,
+    cos_disposal: cosTipping,
     cos_tolls: cosTolls,
-    cos_tarpaulins: cosTarp,
+    cos_other: cosTarp,
     opex_total: opexTotal,
     opex_rent: opexRent,
-    opex_wages: opexWages,
+    opex_admin: opexWages,
     opex_advertising: opexAdvert,
-    opex_accounting: opexAcct,
+    opex_other: opexAcct + opexPhone,
     opex_insurance: opexInsur,
-    opex_phone: opexPhone,
     gross_profit: grossProfit,
     gross_margin_pct: Math.round(grossMarginPct * 10) / 10,
     net_profit: netProfit,
     net_margin_pct: Math.round(netMarginPct * 10) / 10,
-    data_source: 'xero',
     updated_at: new Date().toISOString(),
   }
 }
@@ -195,14 +193,13 @@ function parseBalanceSheet(report) {
   }
 
   return {
-    cash_and_bank: cash,
+    cash_balance: cash,
     accounts_receivable: ar,
     total_assets: totalAssets,
     total_liabilities: totalLiabilities,
     net_equity: equity,
     gst_liability: gst,
     payg_liability: payg,
-    data_source: 'xero',
     updated_at: new Date().toISOString(),
   }
 }
@@ -244,8 +241,11 @@ function parseAgedReceivables(report) {
 
 // ── Supabase writers ──────────────────────────────────────────────────────────
 
-async function upsertToSupabase(table, data, serviceKey) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+async function upsertToSupabase(table, data, serviceKey, onConflict = null) {
+  const url = onConflict
+    ? `${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`
+    : `${SUPABASE_URL}/rest/v1/${table}`
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${serviceKey}`,
@@ -289,15 +289,15 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
     report_month: `${month}-01`,
     status: 'complete',
     updated_at: new Date().toISOString(),
-  }, serviceKey)
+  }, serviceKey, 'report_month')
 
-  await upsertToSupabase('financials_monthly', { ...financials, report_month: `${month}-01` }, serviceKey)
+  await upsertToSupabase('financials_monthly', { ...financials, report_month: `${month}-01` }, serviceKey, 'report_month')
 
   if (balanceSheet.total_assets !== undefined) {
     await upsertToSupabase('balance_sheet_monthly', {
       report_month: `${month}-01`,
       ...balanceSheet,
-    }, serviceKey)
+    }, serviceKey, 'report_month')
   }
 
   if (arData && arData.total > 0) {
