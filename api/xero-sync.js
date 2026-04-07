@@ -275,14 +275,10 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
     fetchBalanceSheet(accessToken, tenantId, toDate),
   ])
 
-  // AR is best-effort — a bad AR response must not abort the whole sync
-  let arReport = null
-  let arError = null
-  try {
-    arReport = await fetchAgedReceivables(accessToken, tenantId, fromDate, toDate)
-  } catch (err) {
-    arError = err.message
-  }
+  // TODO: AR is disabled — AgedReceivablesByContact requires a contactID param (per-contact
+  // report, not a summary). Needs rework to fetch per-contact and aggregate. See Xero docs.
+  const arReport = null
+  const arError = null
 
   const plSections  = parsePLSections(plReport)
   const financials  = mapPLToFinancials(plSections, month)
@@ -321,10 +317,8 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
 
   await upsertToSupabase('xero_sync_log', {
     sync_month: `${month}-01`,
-    status: arError ? 'partial' : 'success',
-    message: arError
-      ? `Synced P&L + BS from Xero: ${tenantId}. AR failed: ${arError}`
-      : `Synced from Xero: ${tenantId}`,
+    status: 'success',
+    message: `Synced P&L + BS from Xero: ${tenantId}`,
     rows_written: {
       financials: 1,
       balance_sheet: balanceSheet.total_assets ? 1 : 0,
