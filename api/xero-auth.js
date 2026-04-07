@@ -16,13 +16,12 @@ export default async function handler(req) {
 
   const redirectUri = 'https://binnedit-hub.vercel.app/api/xero-callback'
   const scopes = [
-    'accounting.reports.read',
-    'accounting.transactions.read',
-    'accounting.contacts.read',
-    'offline_access',
     'openid',
     'profile',
     'email',
+    'offline_access',
+    'accounting.reports.read',
+    'accounting.contacts.read',
   ].join(' ')
   const state = crypto.randomUUID()
 
