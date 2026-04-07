@@ -40,11 +40,15 @@ async function fetchBalanceSheet(accessToken, tenantId, date) {
   return data.Reports?.[0]
 }
 
-async function fetchAgedReceivables(accessToken, tenantId, date) {
-  const res = await fetch(`${XERO_API}/Reports/AgedReceivablesByContact?date=${date}`, {
+async function fetchAgedReceivables(accessToken, tenantId, fromDate, toDate) {
+  const params = new URLSearchParams({ fromDate, toDate })
+  const res = await fetch(`${XERO_API}/Reports/AgedReceivablesByContact?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}`, 'Xero-tenant-id': tenantId, Accept: 'application/json' }
   })
-  if (!res.ok) throw new Error(`Xero AR fetch failed: ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Xero AR fetch failed: ${res.status}${body ? ` — ${body}` : ''}`)
+  }
   const data = await res.json()
   return data.Reports?.[0]
 }
@@ -265,16 +269,25 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
   const lastDay  = new Date(year, mon, 0).getDate()
   const toDate   = `${month}-${String(lastDay).padStart(2, '0')}`
 
-  const [plReport, bsReport, arReport] = await Promise.all([
+  // P&L and Balance Sheet are required — let these throw if they fail
+  const [plReport, bsReport] = await Promise.all([
     fetchProfitAndLoss(accessToken, tenantId, fromDate, toDate),
     fetchBalanceSheet(accessToken, tenantId, toDate),
-    fetchAgedReceivables(accessToken, tenantId, toDate),
   ])
+
+  // AR is best-effort — a bad AR response must not abort the whole sync
+  let arReport = null
+  let arError = null
+  try {
+    arReport = await fetchAgedReceivables(accessToken, tenantId, fromDate, toDate)
+  } catch (err) {
+    arError = err.message
+  }
 
   const plSections  = parsePLSections(plReport)
   const financials  = mapPLToFinancials(plSections, month)
   const balanceSheet = parseBalanceSheet(bsReport)
-  const arData      = parseAgedReceivables(arReport)
+  const arData      = arReport ? parseAgedReceivables(arReport) : null
 
   await upsertToSupabase('monthly_reports', {
     report_month: `${month}-01`,
@@ -292,7 +305,7 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
     }, serviceKey)
   }
 
-  if (arData.total > 0) {
+  if (arData && arData.total > 0) {
     await upsertToSupabase('debtors_monthly', {
       report_month: `${month}-01`,
       ar_total: arData.total,
@@ -308,12 +321,14 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
 
   await upsertToSupabase('xero_sync_log', {
     sync_month: `${month}-01`,
-    status: 'success',
-    message: `Synced from Xero: ${tenantId}`,
+    status: arError ? 'partial' : 'success',
+    message: arError
+      ? `Synced P&L + BS from Xero: ${tenantId}. AR failed: ${arError}`
+      : `Synced from Xero: ${tenantId}`,
     rows_written: {
       financials: 1,
       balance_sheet: balanceSheet.total_assets ? 1 : 0,
-      debtors: arData.total > 0 ? 1 : 0,
+      debtors: arData && arData.total > 0 ? 1 : 0,
     },
     synced_by: userId || null,
     created_at: new Date().toISOString(),
@@ -325,7 +340,8 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
     cos: financials.cos_total,
     grossMargin: financials.gross_margin_pct,
     netProfit: financials.net_profit,
-    arTotal: arData.total,
+    arTotal: arData ? arData.total : null,
+    arError: arError || undefined,
   }
 }
 
