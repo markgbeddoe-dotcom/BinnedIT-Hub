@@ -13,6 +13,118 @@ const iStyle = {
   fontFamily: fontBody,
 };
 
+// ─── White-Label Widget section ───────────────────────────────────────────────
+const EMBED_TENANTS = [
+  { slug: 'binned-it', label: 'Binned-IT Pty Ltd (default)' },
+];
+
+function WhiteLabelWidget() {
+  const [copied, setCopied] = useState(false);
+  const [selectedSlug, setSelectedSlug] = useState('binned-it');
+
+  const embedUrl = `https://binnedit-hub.vercel.app/embed/${selectedSlug}`;
+  const embedCode = `<iframe\n  src="${embedUrl}"\n  width="100%"\n  height="700"\n  frameborder="0"\n  style="border:none;border-radius:12px;"\n  title="Book a Skip Bin"\n></iframe>`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(embedCode).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // Fallback for browsers without clipboard API
+      const ta = document.createElement('textarea');
+      ta.value = embedCode;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24 }}>
+      <div style={{ fontFamily: fontHead, fontSize: 14, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 4 }}>
+        White-Label Booking Widget
+      </div>
+      <p style={{ fontSize: 13, color: B.textMuted, marginBottom: 20, lineHeight: 1.6 }}>
+        Embed the booking form on any third-party website using this iframe snippet. The widget uses your tenant branding and saves bookings to your Supabase database.
+      </p>
+
+      {/* Tenant selector */}
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ display: 'block', fontSize: 12, color: B.textSecondary, fontWeight: 600, marginBottom: 6 }}>Tenant Slug</label>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            value={selectedSlug}
+            onChange={e => setSelectedSlug(e.target.value)}
+            style={{ ...iStyle, minWidth: 240 }}
+          >
+            {EMBED_TENANTS.map(t => (
+              <option key={t.slug} value={t.slug}>{t.label}</option>
+            ))}
+          </select>
+          <a
+            href={embedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 12, color: B.blue, textDecoration: 'none', fontWeight: 600 }}
+          >
+            Preview widget ↗
+          </a>
+        </div>
+      </div>
+
+      {/* Embed code */}
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ display: 'block', fontSize: 12, color: B.textSecondary, fontWeight: 600, marginBottom: 6 }}>Embed Code</label>
+        <div style={{ position: 'relative' }}>
+          <pre style={{
+            background: '#1A1A2E', color: '#E2E8F0', borderRadius: 8,
+            padding: '16px 20px', fontSize: 12, lineHeight: 1.7,
+            overflowX: 'auto', margin: 0,
+            fontFamily: '"Courier New", Courier, monospace',
+            border: `1px solid ${B.cardBorder}`,
+          }}>
+            {embedCode}
+          </pre>
+        </div>
+      </div>
+
+      <button
+        onClick={handleCopy}
+        style={{
+          background: copied ? B.green : B.yellow,
+          border: 'none', borderRadius: 6,
+          padding: '8px 20px',
+          fontFamily: fontHead, fontSize: 12, fontWeight: 700,
+          color: copied ? '#fff' : B.black,
+          textTransform: 'uppercase', cursor: 'pointer',
+          transition: 'background 0.2s, color 0.2s',
+        }}
+      >
+        {copied ? '✓ Copied!' : 'Copy Embed Code'}
+      </button>
+
+      {/* Usage instructions */}
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${B.cardBorder}` }}>
+        <div style={{ fontFamily: fontHead, fontSize: 11, fontWeight: 700, color: B.textSecondary, textTransform: 'uppercase', marginBottom: 10 }}>How to Use</div>
+        {[
+          'Paste the embed code into any HTML page where you want the booking form to appear.',
+          'The widget reads branding (logo, colours, bin sizes) from the tenant config in your Supabase database.',
+          'Bookings submitted through the widget are saved to your bookings table with the tenant_id set.',
+          'To add a new white-label tenant, insert a row into the tenants and tenant_bin_sizes tables.',
+        ].map((tip, i) => (
+          <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 8, fontSize: 12, color: B.textMuted, lineHeight: 1.5 }}>
+            <span style={{ color: B.yellow, fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span>
+            <span>{tip}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -552,6 +664,9 @@ export default function SettingsPage() {
           )}
         </div>
       )}
+
+      {/* White-Label Booking Widget */}
+      {isOwner && <WhiteLabelWidget />}
 
       {/* Company Info */}
       <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24 }}>

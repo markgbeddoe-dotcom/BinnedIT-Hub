@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import LoginPage from './components/LoginPage'
 import InvestorView from './components/InvestorView'
 import BookingPage from './components/BookingPage'
+import EmbedBookingPage from './components/EmbedBookingPage'
 import DriverApp from './components/driver/DriverApp'
 import { queryClient } from './hooks/queryClient'
 
@@ -16,6 +17,12 @@ function AuthGate() {
 
   // Public routes — no auth required
   if (location.pathname === '/book') return <BookingPage />
+
+  // White-label embed widget — public, no auth, no chrome
+  if (location.pathname.startsWith('/embed/')) {
+    const tenantSlug = location.pathname.split('/')[2] || ''
+    return <EmbedBookingPage tenantSlug={tenantSlug} />
+  }
 
   // Driver portal — handles its own auth internally
   if (location.pathname.startsWith('/driver')) return <DriverApp />
