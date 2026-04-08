@@ -109,54 +109,51 @@ function mapPLToFinancials(sections, month) {
   const netMarginPct   = revTotal > 0 ? (netProfit / revTotal) * 100 : 0
 
   const revRows = revSection._rows
-  const revAsbestos    = sumByKeywords(revRows, 'asbestos', 'asb')
-  const revSoil        = sumByKeywords(revRows, 'soil', 'contaminated')
-  const revGreenWaste  = sumByKeywords(revRows, 'green', 'garden', 'vegetation')
-  const revOther       = sumByKeywords(revRows, 'other', 'misc', 'sundry')
-  const revGeneralWaste = Math.max(0, revTotal - revAsbestos - revSoil - revGreenWaste - revOther)
+  const revAsbestos = sumByKeywords(revRows, 'asbestos', 'asb')
+  const revSoil     = sumByKeywords(revRows, 'soil', 'contaminated')
+  const revGreen    = sumByKeywords(revRows, 'green', 'garden', 'vegetation')
+  const revOther    = sumByKeywords(revRows, 'other', 'misc', 'sundry')
+  const revGeneral  = Math.max(0, revTotal - revAsbestos - revSoil - revGreen - revOther)
 
-  const cosRows = cosSection._rows
+  const cosRows    = cosSection._rows
   const cosWages   = sumByKeywords(cosRows, 'wage', 'driver wage', 'labour', 'labor')
   const cosFuel    = sumByKeywords(cosRows, 'fuel', 'petrol', 'diesel')
-  const cosRepairs = sumByKeywords(cosRows, 'repair', 'maintenance', 'service', 'vehicle')
-  const cosTipping = sumByKeywords(cosRows, 'tip', 'disposal', 'landfill', 'waste levy', 'tipping')
-  const cosTolls   = sumByKeywords(cosRows, 'toll')
-  const cosTarp    = sumByKeywords(cosRows, 'tarp', 'cover')
+  const cosDisposal = sumByKeywords(cosRows, 'tip', 'disposal', 'landfill', 'waste levy', 'tipping')
+  // All remaining COS items (repairs, tolls, tarp, etc.) → cos_other
+  const cosOther   = Math.max(0, cosTotal - cosWages - cosFuel - cosDisposal)
 
-  const opexRows = opexSection._rows
+  const opexRows   = opexSection._rows
   const opexRent   = sumByKeywords(opexRows, 'rent', 'lease')
-  const opexWages  = sumByKeywords(opexRows, 'wage', 'salary', 'admin wage', 'office')
+  const opexAdmin  = sumByKeywords(opexRows, 'wage', 'salary', 'admin wage', 'office')
   const opexAdvert = sumByKeywords(opexRows, 'adverti', 'market', 'promo')
-  const opexAcct   = sumByKeywords(opexRows, 'account', 'bookkeep', 'audit')
   const opexInsur  = sumByKeywords(opexRows, 'insur')
-  const opexPhone  = sumByKeywords(opexRows, 'phone', 'mobile', 'internet', 'telco')
+  // All remaining opex items (accounting, phone, etc.) → opex_other
+  const opexOther  = Math.max(0, opexTotal - opexRent - opexAdmin - opexAdvert - opexInsur)
 
+  // Columns sent match financials_monthly schema exactly — no extras
   return {
-    report_month: `${month}-01`,
-    rev_total: revTotal,
-    rev_general: revGeneralWaste,
+    rev_general: revGeneral,
     rev_asbestos: revAsbestos,
     rev_soil: revSoil,
-    rev_green: revGreenWaste,
+    rev_green: revGreen,
     rev_other: revOther,
-    cos_total: cosTotal,
+    rev_total: revTotal,
     cos_wages: cosWages,
     cos_fuel: cosFuel,
-    cos_repairs: cosRepairs,
-    cos_disposal: cosTipping,
-    cos_tolls: cosTolls,
-    cos_other: cosTarp,
-    opex_total: opexTotal,
-    opex_rent: opexRent,
-    opex_admin: opexWages,
-    opex_advertising: opexAdvert,
-    opex_other: opexAcct + opexPhone,
-    opex_insurance: opexInsur,
+    cos_disposal: cosDisposal,
+    cos_other: cosOther,
+    cos_total: cosTotal,
     gross_profit: grossProfit,
     gross_margin_pct: Math.round(grossMarginPct * 10) / 10,
+    opex_rent: opexRent,
+    opex_admin: opexAdmin,
+    opex_advertising: opexAdvert,
+    opex_insurance: opexInsur,
+    opex_other: opexOther,
+    opex_total: opexTotal,
     net_profit: netProfit,
     net_margin_pct: Math.round(netMarginPct * 10) / 10,
-    updated_at: new Date().toISOString(),
+    revenue_total: revTotal,
   }
 }
 
@@ -192,6 +189,7 @@ function parseBalanceSheet(report) {
     }
   }
 
+  // Columns sent match balance_sheet_monthly schema exactly — no extras
   return {
     cash_balance: cash,
     accounts_receivable: ar,
@@ -200,7 +198,6 @@ function parseBalanceSheet(report) {
     net_equity: equity,
     gst_liability: gst,
     payg_liability: payg,
-    updated_at: new Date().toISOString(),
   }
 }
 
@@ -241,11 +238,9 @@ function parseAgedReceivables(report) {
 
 // ── Supabase writers ──────────────────────────────────────────────────────────
 
-async function upsertToSupabase(table, data, serviceKey, onConflict = null) {
-  const url = onConflict
-    ? `${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`
-    : `${SUPABASE_URL}/rest/v1/${table}`
-  const res = await fetch(url, {
+// Generic upsert — only for tables with a UNIQUE constraint (monthly_reports, xero_sync_log)
+async function upsertToSupabase(table, data, serviceKey) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${serviceKey}`,
@@ -258,6 +253,61 @@ async function upsertToSupabase(table, data, serviceKey, onConflict = null) {
   if (!res.ok) {
     const err = await res.text()
     throw new Error(`Supabase ${table} upsert failed: ${err}`)
+  }
+}
+
+// Upsert monthly_reports and return the row id (needed as FK for child tables)
+async function upsertMonthlyReport(reportMonth, serviceKey) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/monthly_reports`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=representation',
+    },
+    body: JSON.stringify({
+      report_month: reportMonth,
+      status: 'complete',
+      updated_at: new Date().toISOString(),
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Supabase monthly_reports upsert failed: ${err}`)
+  }
+  const rows = await res.json()
+  if (!rows?.[0]?.id) throw new Error('monthly_reports upsert returned no id')
+  return rows[0].id
+}
+
+// DELETE existing row(s) for the month, then INSERT fresh — avoids UNIQUE constraint requirement
+async function deleteAndInsert(table, reportId, reportMonth, data, serviceKey) {
+  const delRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/${table}?report_month=eq.${encodeURIComponent(reportMonth)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey },
+    }
+  )
+  if (!delRes.ok) {
+    const err = await delRes.text()
+    throw new Error(`Supabase ${table} delete failed: ${err}`)
+  }
+
+  const insRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({ report_id: reportId, report_month: reportMonth, ...data }),
+  })
+  if (!insRes.ok) {
+    const err = await insRes.text()
+    throw new Error(`Supabase ${table} insert failed: ${err}`)
   }
 }
 
@@ -275,53 +325,38 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
     fetchBalanceSheet(accessToken, tenantId, toDate),
   ])
 
-  // TODO: AR is disabled — AgedReceivablesByContact requires a contactID param (per-contact
+  // AR is disabled — AgedReceivablesByContact requires a contactID param (per-contact
   // report, not a summary). Needs rework to fetch per-contact and aggregate. See Xero docs.
   const arReport = null
-  const arError = null
 
   const plSections  = parsePLSections(plReport)
   const financials  = mapPLToFinancials(plSections, month)
   const balanceSheet = parseBalanceSheet(bsReport)
   const arData      = arReport ? parseAgedReceivables(arReport) : null
+  const reportMonth = `${month}-01`
 
-  await upsertToSupabase('monthly_reports', {
-    report_month: `${month}-01`,
-    status: 'complete',
-    updated_at: new Date().toISOString(),
-  }, serviceKey, 'report_month')
+  // Step 1: upsert monthly_reports — returns the uuid needed as FK
+  const reportId = await upsertMonthlyReport(reportMonth, serviceKey)
 
-  await upsertToSupabase('financials_monthly', { ...financials, report_month: `${month}-01` }, serviceKey, 'report_month')
+  // Step 2: DELETE + INSERT financials_monthly (no UNIQUE on report_month — must use delete/insert)
+  await deleteAndInsert('financials_monthly', reportId, reportMonth, financials, serviceKey)
 
+  // Step 3: DELETE + INSERT balance_sheet_monthly
   if (balanceSheet.total_assets !== undefined) {
-    await upsertToSupabase('balance_sheet_monthly', {
-      report_month: `${month}-01`,
-      ...balanceSheet,
-    }, serviceKey, 'report_month')
+    await deleteAndInsert('balance_sheet_monthly', reportId, reportMonth, balanceSheet, serviceKey)
   }
 
-  if (arData && arData.total > 0) {
-    await upsertToSupabase('debtors_monthly', {
-      report_month: `${month}-01`,
-      ar_total: arData.total,
-      ar_current: arData.current,
-      ar_30_days: arData.days30,
-      ar_60_days: arData.days60,
-      ar_90_days: arData.days90,
-      ar_older: arData.older,
-      top_debtors: arData.topDebtors,
-      updated_at: new Date().toISOString(),
-    }, serviceKey)
-  }
+  // AR disabled — debtors_monthly requires per-debtor rows; skipping until reworked
+  void arData
 
   await upsertToSupabase('xero_sync_log', {
-    sync_month: `${month}-01`,
+    sync_month: reportMonth,
     status: 'success',
     message: `Synced P&L + BS from Xero: ${tenantId}`,
     rows_written: {
       financials: 1,
       balance_sheet: balanceSheet.total_assets ? 1 : 0,
-      debtors: arData && arData.total > 0 ? 1 : 0,
+      debtors: 0,
     },
     synced_by: userId || null,
     created_at: new Date().toISOString(),
@@ -333,8 +368,7 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
     cos: financials.cos_total,
     grossMargin: financials.gross_margin_pct,
     netProfit: financials.net_profit,
-    arTotal: arData ? arData.total : null,
-    arError: arError || undefined,
+    arTotal: null,
   }
 }
 
