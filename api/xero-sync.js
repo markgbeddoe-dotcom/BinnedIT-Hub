@@ -238,33 +238,45 @@ function parseAgedReceivables(report) {
 
 // ── Supabase writers ──────────────────────────────────────────────────────────
 
-// Generic upsert — only for tables with a UNIQUE constraint (monthly_reports, xero_sync_log)
-async function upsertToSupabase(table, data, serviceKey) {
+// Plain INSERT for log tables (no unique constraint, no conflict possible)
+async function insertToSupabase(table, data, serviceKey) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${serviceKey}`,
       apikey: serviceKey,
       'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates',
+      Prefer: 'return=minimal',
     },
     body: JSON.stringify(data),
   })
   if (!res.ok) {
     const err = await res.text()
-    throw new Error(`Supabase ${table} upsert failed: ${err}`)
+    throw new Error(`Supabase ${table} insert failed: ${err}`)
   }
 }
 
-// Upsert monthly_reports and return the row id (needed as FK for child tables)
-async function upsertMonthlyReport(reportMonth, serviceKey) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/monthly_reports`, {
+// DELETE existing monthly_reports row for the month, then INSERT fresh — returns the new uuid
+async function deleteAndInsertMonthlyReport(reportMonth, serviceKey) {
+  const delRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/monthly_reports?report_month=eq.${encodeURIComponent(reportMonth)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey },
+    }
+  )
+  if (!delRes.ok) {
+    const err = await delRes.text()
+    throw new Error(`Supabase monthly_reports delete failed: ${err}`)
+  }
+
+  const insRes = await fetch(`${SUPABASE_URL}/rest/v1/monthly_reports`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${serviceKey}`,
       apikey: serviceKey,
       'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates,return=representation',
+      Prefer: 'return=representation',
     },
     body: JSON.stringify({
       report_month: reportMonth,
@@ -272,12 +284,12 @@ async function upsertMonthlyReport(reportMonth, serviceKey) {
       updated_at: new Date().toISOString(),
     }),
   })
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Supabase monthly_reports upsert failed: ${err}`)
+  if (!insRes.ok) {
+    const err = await insRes.text()
+    throw new Error(`Supabase monthly_reports insert failed: ${err}`)
   }
-  const rows = await res.json()
-  if (!rows?.[0]?.id) throw new Error('monthly_reports upsert returned no id')
+  const rows = await insRes.json()
+  if (!rows?.[0]?.id) throw new Error('monthly_reports insert returned no id')
   return rows[0].id
 }
 
@@ -335,8 +347,8 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
   const arData      = arReport ? parseAgedReceivables(arReport) : null
   const reportMonth = `${month}-01`
 
-  // Step 1: upsert monthly_reports — returns the uuid needed as FK
-  const reportId = await upsertMonthlyReport(reportMonth, serviceKey)
+  // Step 1: DELETE + INSERT monthly_reports — returns the uuid needed as FK
+  const reportId = await deleteAndInsertMonthlyReport(reportMonth, serviceKey)
 
   // Step 2: DELETE + INSERT financials_monthly (no UNIQUE on report_month — must use delete/insert)
   await deleteAndInsert('financials_monthly', reportId, reportMonth, financials, serviceKey)
@@ -349,7 +361,7 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
   // AR disabled — debtors_monthly requires per-debtor rows; skipping until reworked
   void arData
 
-  await upsertToSupabase('xero_sync_log', {
+  await insertToSupabase('xero_sync_log', {
     sync_month: reportMonth,
     status: 'success',
     message: `Synced P&L + BS from Xero: ${tenantId}`,
@@ -401,7 +413,7 @@ async function syncMonthRange(fromMonth, toMonth, accessToken, tenantId, service
     } catch (err) {
       results.push({ month, ok: false, error: err.message })
       try {
-        await upsertToSupabase('xero_sync_log', {
+        await insertToSupabase('xero_sync_log', {
           sync_month: `${month}-01`,
           status: 'error',
           message: err.message,
@@ -491,7 +503,7 @@ export default async function handler(req) {
 
   } catch (err) {
     try {
-      await upsertToSupabase('xero_sync_log', {
+      await insertToSupabase('xero_sync_log', {
         sync_month: month ? `${month}-01` : new Date().toISOString().slice(0, 7) + '-01',
         status: 'error',
         message: err.message,
