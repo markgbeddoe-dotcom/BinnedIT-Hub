@@ -82,6 +82,7 @@ function parsePLSections(report) {
       }
     }
   }
+  console.log('XERO_PL_SECTIONS:', Object.keys(sections))
   return sections
 }
 
@@ -92,9 +93,22 @@ function sumByKeywords(rows, ...keywords) {
 }
 
 function mapPLToFinancials(sections, month) {
-  const revKey = Object.keys(sections).find(k => k.includes('income') || k.includes('revenue') || k.includes('trading')) || ''
-  const cosKey = Object.keys(sections).find(k => k.includes('cost of sale') || k.includes('direct cost')) || ''
-  const opexKey = Object.keys(sections).find(k => k.includes('operating') || k.includes('overhead') || k.includes('expense')) || ''
+  const revKeywords  = ['income', 'revenue', 'trading', 'sales', 'turnover', 'fees']
+  const cosKeywords  = ['cost of sale', 'direct cost', 'cost of goods', 'cogs', 'purchases', 'cost of sale']
+  const opexKeywords = ['operating', 'overhead', 'expense', 'admin', 'general', 'other expense', 'indirect']
+
+  let revKey  = Object.keys(sections).find(k => revKeywords.some(kw => k.includes(kw))) || ''
+  const cosKey  = Object.keys(sections).find(k => cosKeywords.some(kw => k.includes(kw))) || ''
+  const opexKey = Object.keys(sections).find(k => opexKeywords.some(kw => k.includes(kw))) || ''
+
+  // Fallback: if no revenue section matched, use the first section with a positive total
+  // that isn't the COS or OPEX section
+  if (!revKey) {
+    revKey = Object.keys(sections).find(k => k !== cosKey && k !== opexKey && sections[k]._total > 0) || ''
+    if (revKey) console.log('XERO_PL_REVENUE_FALLBACK: using section as revenue:', revKey)
+  }
+
+  console.log('MATCHED_KEYS:', { revKey, cosKey, opexKey })
 
   const revSection  = sections[revKey]  || { _total: 0, _rows: [] }
   const cosSection  = sections[cosKey]  || { _total: 0, _rows: [] }
