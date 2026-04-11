@@ -92,61 +92,93 @@ function sumByKeywords(rows, ...keywords) {
     .reduce((sum, r) => sum + r.amount, 0)
 }
 
+// Get section total: SummaryRow value if non-zero, else sum of all Row amounts
+function sectionTotal(section) {
+  if (!section) return 0
+  if (section._total !== 0) return section._total
+  return section._rows.reduce((sum, r) => sum + r.amount, 0)
+}
+
 function mapPLToFinancials(sections, month) {
-  const revKeywords  = ['income', 'revenue', 'trading', 'sales', 'turnover', 'fees']
-  const cosKeywords  = ['cost of sale', 'direct cost', 'cost of goods', 'cogs', 'purchases', 'cost of sale']
-  const opexKeywords = ['operating', 'overhead', 'expense', 'admin', 'general', 'other expense', 'indirect']
+  // ── Revenue ───────────────────────────────────────────────────────────────────
+  // Xero splits revenue into 'revenue - <category>' sub-sections under a parent 'income' section.
+  // Aggregate all 'revenue - *' keys; use 'income' _total as rev_total if it has one.
+  const revSubKeys = Object.keys(sections).filter(k => k.startsWith('revenue -'))
 
-  let revKey  = Object.keys(sections).find(k => revKeywords.some(kw => k.includes(kw))) || ''
-  const cosKey  = Object.keys(sections).find(k => cosKeywords.some(kw => k.includes(kw))) || ''
-  const opexKey = Object.keys(sections).find(k => opexKeywords.some(kw => k.includes(kw))) || ''
+  const revAsbestos = revSubKeys
+    .filter(k => k.includes('asbestos'))
+    .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
 
-  // Fallback: if no revenue section matched, use the first section with a positive total
-  // that isn't the COS or OPEX section
-  if (!revKey) {
-    revKey = Object.keys(sections).find(k => k !== cosKey && k !== opexKey && sections[k]._total > 0) || ''
-    if (revKey) console.log('XERO_PL_REVENUE_FALLBACK: using section as revenue:', revKey)
-  }
+  const revSoil = revSubKeys
+    .filter(k => k.includes('soil') || k.includes('contaminated'))
+    .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
 
-  console.log('MATCHED_KEYS:', { revKey, cosKey, opexKey })
+  const revGreen = revSubKeys
+    .filter(k => k.includes('green'))
+    .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
 
-  const revSection  = sections[revKey]  || { _total: 0, _rows: [] }
-  const cosSection  = sections[cosKey]  || { _total: 0, _rows: [] }
-  const opexSection = sections[opexKey] || { _total: 0, _rows: [] }
+  const revOther = revSubKeys
+    .filter(k => !k.includes('asbestos') && !k.includes('soil') && !k.includes('contaminated') && !k.includes('green'))
+    .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
 
-  const revTotal  = revSection._total
-  const cosTotal  = cosSection._total
-  const opexTotal = opexSection._total
+  // Prefer 'income' section total (parent sum); fall back to summing sub-sections
+  const incomeTotal = sectionTotal(sections['income'])
+  const revSubSum = revAsbestos + revSoil + revGreen + revOther
+  const revTotal = incomeTotal > 0 ? incomeTotal : revSubSum
+
+  // ── Cost of Sales ─────────────────────────────────────────────────────────────
+  // 'less cost of sales' — values may be stored as negative; use Math.abs
+  const cosSection = sections['less cost of sales'] || { _total: 0, _rows: [] }
+  const cosTotal   = Math.abs(sectionTotal(cosSection))
+  const cosRows    = cosSection._rows
+
+  const cosWages    = Math.abs(sumByKeywords(cosRows, 'wage', 'driver', 'labour', 'labor'))
+  const cosFuel     = Math.abs(sumByKeywords(cosRows, 'fuel', 'petrol', 'diesel'))
+  const cosDisposal = Math.abs(sumByKeywords(cosRows, 'tip', 'disposal', 'landfill', 'waste levy', 'tipping'))
+  const cosOther    = Math.max(0, cosTotal - cosWages - cosFuel - cosDisposal)
+
+  // ── Operating Expenses ────────────────────────────────────────────────────────
+  // Three sections combined: 'less operating expenses', 'other overheads', 'staffing overheads'
+  const opexMainSection  = sections['less operating expenses'] || { _total: 0, _rows: [] }
+  const opexOtherSection = sections['other overheads']         || { _total: 0, _rows: [] }
+  const opexStaffSection = sections['staffing overheads']      || { _total: 0, _rows: [] }
+
+  const opexMainTotal  = Math.abs(sectionTotal(opexMainSection))
+  const opexOtherTotal = Math.abs(sectionTotal(opexOtherSection))
+  const opexStaffTotal = Math.abs(sectionTotal(opexStaffSection))
+  const opexTotal      = opexMainTotal + opexOtherTotal + opexStaffTotal
+
+  // staffing overheads → opex_admin (wages/staff)
+  const opexAdmin = opexStaffTotal
+
+  // 'less operating expenses' rows → rent, insurance, advertising
+  const opexRows   = opexMainSection._rows
+  const opexRent   = Math.abs(sumByKeywords(opexRows, 'rent', 'lease'))
+  const opexAdvert = Math.abs(sumByKeywords(opexRows, 'adverti', 'market', 'promo'))
+  const opexInsur  = Math.abs(sumByKeywords(opexRows, 'insur'))
+
+  // opex_other = 'other overheads' total + unclassified rows from 'less operating expenses'
+  const opexMainKnown = opexRent + opexAdvert + opexInsur
+  const opexOther = opexOtherTotal + Math.max(0, opexMainTotal - opexMainKnown)
+
+  // ── Derived ───────────────────────────────────────────────────────────────────
   const grossProfit    = revTotal - cosTotal
   const grossMarginPct = revTotal > 0 ? (grossProfit / revTotal) * 100 : 0
   const netProfit      = grossProfit - opexTotal
   const netMarginPct   = revTotal > 0 ? (netProfit / revTotal) * 100 : 0
 
-  const revRows = revSection._rows
-  const revAsbestos = sumByKeywords(revRows, 'asbestos', 'asb')
-  const revSoil     = sumByKeywords(revRows, 'soil', 'contaminated')
-  const revGreen    = sumByKeywords(revRows, 'green', 'garden', 'vegetation')
-  const revOther    = sumByKeywords(revRows, 'other', 'misc', 'sundry')
-  const revGeneral  = Math.max(0, revTotal - revAsbestos - revSoil - revGreen - revOther)
-
-  const cosRows    = cosSection._rows
-  const cosWages   = sumByKeywords(cosRows, 'wage', 'driver wage', 'labour', 'labor')
-  const cosFuel    = sumByKeywords(cosRows, 'fuel', 'petrol', 'diesel')
-  const cosDisposal = sumByKeywords(cosRows, 'tip', 'disposal', 'landfill', 'waste levy', 'tipping')
-  // All remaining COS items (repairs, tolls, tarp, etc.) → cos_other
-  const cosOther   = Math.max(0, cosTotal - cosWages - cosFuel - cosDisposal)
-
-  const opexRows   = opexSection._rows
-  const opexRent   = sumByKeywords(opexRows, 'rent', 'lease')
-  const opexAdmin  = sumByKeywords(opexRows, 'wage', 'salary', 'admin wage', 'office')
-  const opexAdvert = sumByKeywords(opexRows, 'adverti', 'market', 'promo')
-  const opexInsur  = sumByKeywords(opexRows, 'insur')
-  // All remaining opex items (accounting, phone, etc.) → opex_other
-  const opexOther  = Math.max(0, opexTotal - opexRent - opexAdmin - opexAdvert - opexInsur)
+  console.log('XERO_PL_PARSED:', {
+    month,
+    revTotal, revAsbestos, revSoil, revGreen, revOther,
+    cosTotal, cosWages, cosFuel, cosDisposal, cosOther,
+    opexTotal, opexAdmin, opexRent, opexAdvert, opexInsur, opexOther,
+    grossProfit, grossMarginPct: Math.round(grossMarginPct * 10) / 10,
+    netProfit, netMarginPct: Math.round(netMarginPct * 10) / 10,
+  })
 
   // Columns sent match financials_monthly schema exactly — no extras
   return {
-    rev_general: revGeneral,
+    rev_general: 0,
     rev_asbestos: revAsbestos,
     rev_soil: revSoil,
     rev_green: revGreen,
