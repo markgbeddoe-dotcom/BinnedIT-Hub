@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { B, fontHead, fontBody } from '../theme';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 import { SectionHeader } from './UIComponents';
 import { getAlertThresholds, upsertThreshold, getProfiles, updateProfileRole, getBinTypes, upsertBinType, inviteUser } from '../api/settings';
 import { getXeroStatus, syncXeroMonth, syncXeroAllHistory, getXeroSyncLog } from '../api/xero';
@@ -279,8 +280,10 @@ export default function SettingsPage() {
     }
   };
 
+  const { isMobile } = useBreakpoint();
+
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto', padding: '40px 24px' }}>
+    <div style={{ maxWidth: 800, margin: '0 auto', padding: isMobile ? '20px 12px' : '40px 24px' }}>
       <SectionHeader title="Settings" subtitle="Alert thresholds, users, bin types, and company info" />
 
       {xeroConnectedToast && (
@@ -329,7 +332,8 @@ export default function SettingsPage() {
         ) : thresholds.length === 0 ? (
           <div style={{ color: B.textMuted, fontSize: 13 }}>No thresholds configured. Apply migration 003 to add defaults.</div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 480 }}>
             <thead>
               <tr style={{ borderBottom: `2px solid ${B.cardBorder}` }}>
                 {['Category', 'Metric', 'Warning', 'Critical', 'Unit', ''].map((h, i) => (
@@ -379,6 +383,7 @@ export default function SettingsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

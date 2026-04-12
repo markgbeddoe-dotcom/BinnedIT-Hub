@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { B, fontHead, fmtFull } from '../theme';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 import { useCompetitorRates, useUpsertRate, useDeleteRate } from '../hooks/useCompetitors';
 import AIInsightsPanel from './AIInsightsPanel';
 
@@ -51,6 +52,7 @@ function transformSupabaseRates(rows) {
 }
 
 export default function CompetitorPage({ onBack }) {
+  const { isMobile } = useBreakpoint();
   const { data: supabaseRates, isLoading, isError } = useCompetitorRates();
   const upsertRate = useUpsertRate();
   const deleteRate = useDeleteRate();
@@ -175,15 +177,15 @@ export default function CompetitorPage({ onBack }) {
   }
 
   return (
-    <div style={{maxWidth:1200,margin:'0 auto',padding:'20px 24px'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+    <div style={{maxWidth:1200,margin:'0 auto',padding: isMobile ? '16px 12px' : '20px 24px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20,flexWrap:'wrap',gap:10}}>
         <div>
-          <h2 style={{fontSize:22,fontWeight:800,color:B.textPrimary,margin:0,fontFamily:fontHead,textTransform:'uppercase'}}>Competitor Pricing Matrix</h2>
+          <h2 style={{fontSize: isMobile ? 18 : 22,fontWeight:800,color:B.textPrimary,margin:0,fontFamily:fontHead,textTransform:'uppercase'}}>Competitor Pricing Matrix</h2>
           <p style={{fontSize:13,color:B.textSecondary,margin:'4px 0 0'}}>
             Click any cell to enter or update a rate — {useSupabase ? 'saves to Supabase' : 'saves locally'}
           </p>
         </div>
-        <button onClick={onBack} style={{background:B.cardBg,border:`1px solid ${B.cardBorder}`,color:B.textPrimary,padding:'8px 20px',borderRadius:6,cursor:'pointer',fontFamily:fontHead,fontSize:12,textTransform:'uppercase'}}>← Back</button>
+        <button onClick={onBack} style={{background:B.cardBg,border:`1px solid ${B.cardBorder}`,color:B.textPrimary,padding:'8px 20px',borderRadius:6,cursor:'pointer',fontFamily:fontHead,fontSize:12,textTransform:'uppercase',flexShrink:0}}>← Back</button>
       </div>
 
       {isError && (
@@ -200,15 +202,17 @@ export default function CompetitorPage({ onBack }) {
       </div>
 
       {showAddComp && (
-        <div style={{background:B.cardBg,border:`1px solid ${B.green}44`,borderRadius:10,padding:16,marginBottom:16,display:'flex',gap:10,alignItems:'flex-end'}}>
+        <div style={{background:B.cardBg,border:`1px solid ${B.green}44`,borderRadius:10,padding:16,marginBottom:16,display:'flex',flexDirection: isMobile ? 'column' : 'row',gap:10,alignItems: isMobile ? 'stretch' : 'flex-end'}}>
           <div style={{flex:1}}><label style={{fontSize:10,color:B.textMuted,display:'block',marginBottom:4}}>Competitor Name *</label>
             <input value={newComp.name} onChange={e=>setNewComp(p=>({...p,name:e.target.value}))} placeholder="e.g. Rhino Bins" style={iStyle} /></div>
           <div style={{flex:1}}><label style={{fontSize:10,color:B.textMuted,display:'block',marginBottom:4}}>Source</label>
             <input value={newComp.source} onChange={e=>setNewComp(p=>({...p,source:e.target.value}))} placeholder="e.g. rhinobins.com.au" style={iStyle} /></div>
-          <div style={{width:140}}><label style={{fontSize:10,color:B.textMuted,display:'block',marginBottom:4}}>Date</label>
+          <div style={{width: isMobile ? '100%' : 140}}><label style={{fontSize:10,color:B.textMuted,display:'block',marginBottom:4}}>Date</label>
             <input type="date" value={newComp.date} onChange={e=>setNewComp(p=>({...p,date:e.target.value}))} style={iStyle} /></div>
-          <button onClick={addCompetitor} style={{...btnS(B.green),padding:'8px 20px',height:38}}>Add</button>
-          <button onClick={()=>setShowAddComp(false)} style={{...btnS(B.textMuted),padding:'8px 14px',height:38}}>x</button>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={addCompetitor} style={{...btnS(B.green),padding:'8px 20px',flex: isMobile ? 1 : 'none'}}>Add</button>
+            <button onClick={()=>setShowAddComp(false)} style={{...btnS(B.textMuted),padding:'8px 14px'}}>×</button>
+          </div>
         </div>
       )}
 
@@ -258,7 +262,7 @@ export default function CompetitorPage({ onBack }) {
         </table>
       </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,marginTop:20}}>
+      <div style={{display:'grid',gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(3,1fr)',gap:12,marginTop:20}}>
         {[
           {t:"Services With Data",v:`${binServices.filter(s=>competitors.some(c=>c.rates[s])).length} / ${binServices.length}`,c:B.textPrimary},
           {t:"Premium Position",v:`${binServices.filter(s=>{const c=getComparison(s);return c&&c.diff>0;}).length}`,c:B.green},
