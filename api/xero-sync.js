@@ -121,10 +121,9 @@ function mapPLToFinancials(sections, month) {
     .filter(k => !k.includes('asbestos') && !k.includes('soil') && !k.includes('contaminated') && !k.includes('green'))
     .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
 
-  // Prefer 'income' section total (parent sum); fall back to summing sub-sections
-  const incomeTotal = sectionTotal(sections['income'])
-  const revSubSum = revAsbestos + revSoil + revGreen + revOther
-  const revTotal = incomeTotal > 0 ? incomeTotal : revSubSum
+  // Always sum individual 'revenue - *' sub-sections; the 'income' section _total
+  // is NET income (after costs) in Xero's P&L structure, not gross revenue.
+  const revTotal = revAsbestos + revSoil + revGreen + revOther
 
   // ── Cost of Sales ─────────────────────────────────────────────────────────────
   // 'less cost of sales' — values may be stored as negative; use Math.abs
