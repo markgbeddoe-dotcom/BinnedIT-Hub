@@ -122,11 +122,11 @@ export default function WorkPlanTab({ wpDone, toggleDone }) {
                       <span style={{ fontSize: 13, color: done ? B.textMuted : B.textPrimary, fontWeight: 600, textDecoration: done ? 'line-through' : 'none' }}>{item.action}</span>
                     </div>
                     <div style={{ fontSize: 11, color: B.textMuted, marginTop: 4 }}>{item.why}</div>
-                    <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
                       <span style={{ fontSize: 10, color: B.yellow, background: `${B.yellow}15`, padding: '2px 8px', borderRadius: 4 }}>{item.owner}</span>
-                      <span style={{ fontSize: 10, color: B.textMuted }}>{item.effort}</span>
-                      <span style={{ fontSize: 10, color: B.textMuted }}>Area: {item.area}</span>
-                      {done && <span style={{ fontSize: 10, color: B.green }}>[OK] Done by {done.by} — {new Date(done.at).toLocaleDateString('en-AU')}</span>}
+                      {item.effort ? <span style={{ fontSize: 10, color: B.textMuted }}>{item.effort}</span> : null}
+                      {item.area ? <span style={{ fontSize: 10, color: B.textMuted }}>Area: {item.area}</span> : null}
+                      {done && <span style={{ fontSize: 10, color: B.green }}>Done by {done.by} — {new Date(done.at).toLocaleDateString('en-AU')}</span>}
                     </div>
                   </div>
                   <button

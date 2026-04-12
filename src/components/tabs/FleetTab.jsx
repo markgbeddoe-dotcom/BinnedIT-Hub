@@ -1,6 +1,7 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { B, fmt, fmtFull } from '../../theme';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { SectionHeader, ChartCard, CustomTooltip } from '../UIComponents';
 import * as D from '../../data/financials';
 import { useBinPerformance } from '../../hooks/useMonthData';
@@ -18,6 +19,7 @@ function transformBinPerf(rows) {
 }
 
 export default function FleetTab({ data, selectedMonth, monthCount, monthLabel }) {
+  const { isMobile } = useBreakpoint();
   const reportMonth = selectedMonth ? `${selectedMonth}-01` : null;
   const { data: binPerfData, isLoading, isError } = useBinPerformance(reportMonth);
 
@@ -49,7 +51,7 @@ export default function FleetTab({ data, selectedMonth, monthCount, monthLabel }
       <ChartCard title={`Top Earning Bin Types (${monthLabel})`}>
         <div style={{ overflowX: 'auto' }}>
           <div style={{ minWidth: 320 }}>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={isMobile ? 220 : 300}>
               <BarChart data={chartData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" />
                 <XAxis type="number" tick={{ fill: B.textMuted, fontSize: 10 }} tickFormatter={v => fmt(v)} />

@@ -457,9 +457,9 @@ export default function App() {
 
   // ===== HISTORY SCREEN =====
   const HistoryScreen = () => (
-    <div style={{maxWidth:700,margin:'0 auto',padding:'40px 24px'}}>
-      <div style={{fontFamily:fontHead,fontSize:22,fontWeight:700,color:B.textPrimary,textTransform:'uppercase',marginBottom:20}}>Monthly History</div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
+    <div style={{maxWidth:700,margin:'0 auto',padding: isMobile ? '20px 12px' : '40px 24px'}}>
+      <div style={{fontFamily:fontHead,fontSize: isMobile ? 18 : 22,fontWeight:700,color:B.textPrimary,textTransform:'uppercase',marginBottom:20}}>Monthly History</div>
+      <div style={{display:'grid',gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)',gap:10}}>
         {availableMonths.map((m,mIdx) => {
           const hasData = mIdx < D.months.length;
           return (<button key={m.key} onClick={()=>{setSelectedMonth(m.key);navigate('/dashboard/snapshot');setDashTab('snapshot');}}

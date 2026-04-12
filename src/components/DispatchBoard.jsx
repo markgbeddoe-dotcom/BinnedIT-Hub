@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { fontHead, fontBody } from '../theme';
+import { useBreakpoint } from '../hooks/useBreakpoint';
 import { useBookings, useUpdateBookingStatus, useCreateBooking } from '../hooks/useBookings';
 
 // ─── Dark dispatch theme ──────────────────────────────────────────────────────
@@ -291,6 +292,7 @@ function NewJobModal({ onSubmit, onClose }) {
 
 // ─── Main Board ───────────────────────────────────────────────────────────────
 export default function DispatchBoard() {
+  const { isMobile } = useBreakpoint();
   const [expandedId, setExpandedId]         = useState(null);
   const [filterDriver, setFilterDriver]     = useState('');
   const [showNewJob, setShowNewJob]         = useState(false);
@@ -382,21 +384,21 @@ export default function DispatchBoard() {
   });
 
   return (
-    <div style={{ background: D.bg, minHeight: '100vh', padding: '20px 24px', fontFamily: fontBody, color: D.text }}>
+    <div style={{ background: D.bg, minHeight: '100vh', padding: isMobile ? '16px 12px' : '20px 24px', fontFamily: fontBody, color: D.text }}>
 
       {/* ── Top bar ── */}
       <div style={{ marginBottom: 20 }}>
         {/* Title row */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
           <div>
-            <div style={{ fontFamily: fontHead, fontSize: 26, fontWeight: 700, color: D.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <div style={{ fontFamily: fontHead, fontSize: isMobile ? 20 : 26, fontWeight: 700, color: D.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Dispatch Board
             </div>
-            <div style={{ fontSize: 13, color: D.textMuted, marginTop: 3 }}>{today}</div>
+            <div style={{ fontSize: isMobile ? 11 : 13, color: D.textMuted, marginTop: 3 }}>{today}</div>
           </div>
           <button
             onClick={() => setShowNewJob(true)}
-            style={{ background: D.accent, color: '#0A0A0A', border: 'none', borderRadius: 8, padding: '10px 22px', cursor: 'pointer', fontFamily: fontHead, fontWeight: 700, fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}
+            style={{ background: D.accent, color: '#0A0A0A', border: 'none', borderRadius: 8, padding: isMobile ? '10px 16px' : '10px 22px', cursor: 'pointer', fontFamily: fontHead, fontWeight: 700, fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}
           >
             + New Job
           </button>
