@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { B, fontHead, fontBody } from '../../theme'
 import DriverLogin from './DriverLogin'
@@ -13,6 +14,7 @@ import { getTodayChecklist } from '../../api/driver'
  */
 export default function DriverApp() {
   const { session, loading, profile, signOut } = useAuth()
+  const navigate = useNavigate()
   const [screen, setScreen] = useState('jobs') // 'jobs' | 'checklist'
   const [checklistDone, setChecklistDone] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -85,8 +87,22 @@ export default function DriverApp() {
         top: 0,
         zIndex: 50,
       }}>
-        {/* Logo */}
+        {/* Burger — left side */}
+        <button
+          onClick={() => setMenuOpen(true)}
+          style={{
+            background: 'none', border: 'none', color: '#aaa',
+            fontSize: 24, cursor: 'pointer', lineHeight: 1, padding: '0 4px',
+          }}
+        >
+          ☰
+        </button>
+
+        {/* Logo — right side */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {checklistDone && (
+            <span style={{ color: B.green, fontSize: 20 }} title="Pre-start checklist complete">✓</span>
+          )}
           <div style={{
             background: B.yellow,
             color: B.black,
@@ -103,22 +119,6 @@ export default function DriverApp() {
           <div style={{ fontFamily: fontHead, fontSize: 16, color: B.white, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
             Driver
           </div>
-        </div>
-
-        {/* Driver name + menu */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {checklistDone && (
-            <span style={{ color: B.green, fontSize: 20 }} title="Pre-start checklist complete">✓</span>
-          )}
-          <button
-            onClick={() => setMenuOpen(true)}
-            style={{
-              background: 'none', border: 'none', color: '#888',
-              fontSize: 24, cursor: 'pointer', lineHeight: 1,
-            }}
-          >
-            ☰
-          </button>
         </div>
       </div>
 
@@ -169,13 +169,13 @@ export default function DriverApp() {
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 200 }}
           />
           <div style={{
-            position: 'fixed', top: 0, right: 0, bottom: 0, width: 260,
-            background: '#0D0D1A', borderLeft: `2px solid ${B.yellow}`,
+            position: 'fixed', top: 0, left: 0, bottom: 0, width: 260,
+            background: '#0D0D1A', borderRight: `2px solid ${B.yellow}`,
             zIndex: 201, padding: 24, display: 'flex', flexDirection: 'column',
           }}>
             <button
               onClick={() => setMenuOpen(false)}
-              style={{ background: 'none', border: 'none', color: '#888', fontSize: 28, cursor: 'pointer', alignSelf: 'flex-end' }}
+              style={{ background: 'none', border: 'none', color: '#888', fontSize: 28, cursor: 'pointer', alignSelf: 'flex-start' }}
             >
               ×
             </button>
@@ -200,6 +200,11 @@ export default function DriverApp() {
                 onClick={() => { setScreen('checklist'); setMenuOpen(false) }}
                 badge={checklistDone ? '✓' : '!'}
                 badgeColor={checklistDone ? B.green : B.amber}
+              />
+              <MenuBtn
+                icon="🏠"
+                label="Back to Hub"
+                onClick={() => { setMenuOpen(false); navigate('/') }}
               />
             </div>
 

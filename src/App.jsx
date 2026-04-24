@@ -36,6 +36,8 @@ import PricingTab from './components/PricingTab';
 import AuditLogPage from './components/AuditLogPage';
 import TeamPage from './components/TeamPage';
 import BookingPage from './components/BookingPage';
+import CRMBookingsPage from './components/CRMBookingsPage';
+import CollectionsPage from './components/CollectionsPage';
 import DriverApp from './components/driver/DriverApp';
 import NotificationBell from './components/NotificationBell';
 
@@ -82,6 +84,7 @@ const menuItems = [
   {id:'drivers',icon:'👷',label:'Drivers',section:null},
   {id:'customers',icon:'👥',label:'Customers',section:null},
   {id:'invoices',icon:'🧾',label:'Invoices',section:null},
+  {id:'collections',icon:'⚖️',label:'Collections',section:null},
   // Reports section
   {id:'dashboard',icon:'📊',label:'Reports',section:'REPORTS'},
   {id:'history',icon:'🗓️',label:'Monthly History',section:null},
@@ -145,6 +148,7 @@ export default function App() {
     : location.pathname === '/customers' ? 'customers'
     : location.pathname === '/drivers' ? 'drivers'
     : location.pathname === '/invoices' ? 'invoices'
+    : location.pathname === '/collections' ? 'collections'
     : 'home';
 
   const goHome = () => { navigate('/home'); setMenuOpen(false); };
@@ -565,9 +569,11 @@ export default function App() {
         <Route path="/dispatch" element={<DispatchBoard />} />
         <Route path="/history" element={<HistoryScreen />} />
         <Route path="/reports" element={<ReportsScreen />} />
-        <Route path="/bookings" element={<BookingPage />} />
+        <Route path="/bookings" element={<CRMBookingsPage />} />
+        <Route path="/book" element={<BookingPage />} />
         <Route path="/invoices" element={<InvoicesPage />} />
         <Route path="/customers" element={<CustomersPage />} />
+        <Route path="/collections" element={<CollectionsPage />} />
         <Route path="/drivers" element={<DriverApp />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/audit" element={<AuditLogPage />} />
