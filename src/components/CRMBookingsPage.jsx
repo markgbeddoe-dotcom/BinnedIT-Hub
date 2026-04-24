@@ -103,23 +103,67 @@ const labelSt = { fontSize:11, fontFamily:fontHead, fontWeight:600, color:B.text
 const btnPrimary = { background:B.yellow, border:'none', borderRadius:7, padding:'10px 20px', cursor:'pointer', fontFamily:fontHead, fontSize:12, fontWeight:700, color:B.black, letterSpacing:'0.05em', textTransform:'uppercase' }
 const btnSecondary = { background:'none', border:`1px solid ${B.cardBorder}`, borderRadius:7, padding:'9px 16px', cursor:'pointer', fontFamily:fontHead, fontSize:12, color:B.textSecondary }
 
+const PAYMENT_TERMS_OPTIONS = [
+  { value: 0,  label: 'COD — Cash on Delivery' },
+  { value: 7,  label: 'NET 7 days' },
+  { value: 14, label: 'NET 14 days' },
+  { value: 21, label: 'NET 21 days' },
+  { value: 30, label: 'NET 30 days' },
+]
+
+const ACCOUNT_TYPE_OPTIONS = [
+  { value: 'commercial', label: 'Commercial (no account)' },
+  { value: 'residential', label: 'Residential' },
+  { value: 'account', label: 'Credit Account' },
+  { value: 'cod', label: 'COD Only' },
+]
+
 // ── New Booking Modal ─────────────────────────────────────────────────────────
-function NewBookingModal({ onClose, customers }) {
+function NewBookingModal({ onClose, customers, onCustomerCreated }) {
   const [step, setStep] = useState('customer') // customer → service → details → confirm
+  const [newCustomerMode, setNewCustomerMode] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState(null)
   const [customerSearch, setCustomerSearch] = useState('')
   const [selectedService, setSelectedService] = useState(null)
   const [form, setForm] = useState({ address:'', suburb:'', postcode:'', delivery_date:tomorrowStr(), collection_date:'', special_instructions:'', notes:'' })
+  const [newCust, setNewCust] = useState({ name:'', email:'', phone:'', address:'', suburb:'', postcode:'', abn:'', account_type:'commercial', payment_terms_days:14 })
+  const [savingCust, setSavingCust] = useState(false)
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
 
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
+  const setNC = (k,v) => setNewCust(c=>({...c,[k]:v}))
 
   const filteredCustomers = useMemo(() => {
     if (!customerSearch) return customers.slice(0,8)
     const q = customerSearch.toLowerCase()
     return customers.filter(c=>c.name.toLowerCase().includes(q)||c.suburb?.toLowerCase().includes(q)).slice(0,8)
   }, [customers, customerSearch])
+
+  const handleCreateCustomer = async () => {
+    if (!newCust.name.trim()) return
+    setSavingCust(true)
+    try {
+      const { data, error } = await supabase.from('customers').insert({
+        name: newCust.name.trim(),
+        email: newCust.email || null,
+        phone: newCust.phone || null,
+        address: newCust.address || null,
+        suburb: newCust.suburb || null,
+        postcode: newCust.postcode || null,
+        abn: newCust.abn || null,
+        account_type: newCust.account_type,
+        payment_terms_days: newCust.payment_terms_days,
+        account_status: 'active',
+        credit_status: newCust.account_type === 'account' ? 'unrated' : 'approved',
+      }).select().single()
+      if (error) { alert('Error creating customer: ' + error.message); return }
+      if (onCustomerCreated) onCustomerCreated(data)
+      setSelectedCustomer(data)
+      setNewCustomerMode(false)
+      setStep('service')
+    } finally { setSavingCust(false) }
+  }
 
   const handleSubmit = async () => {
     setSaving(true)
@@ -180,8 +224,8 @@ function NewBookingModal({ onClose, customers }) {
 
         <div style={{ flex:1, overflowY:'auto', padding:24 }}>
 
-          {/* Step 1: Customer selection */}
-          {step === 'customer' && (
+          {/* Step 1: Customer selection or new customer form */}
+          {step === 'customer' && !newCustomerMode && (
             <div>
               <div style={{ fontFamily:fontHead, fontSize:14, fontWeight:700, color:B.textPrimary, marginBottom:16, textTransform:'uppercase' }}>1 — Select Customer Account</div>
               <input style={{ ...inputStyle, marginBottom:12 }} placeholder="Search customer name or suburb…" value={customerSearch} onChange={e=>setCustomerSearch(e.target.value)} autoFocus />
@@ -191,13 +235,89 @@ function NewBookingModal({ onClose, customers }) {
                     style={{ background:B.bg, border:`1px solid ${B.cardBorder}`, borderRadius:8, padding:'12px 14px', cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', gap:12 }}>
                     <div style={{ flex:1 }}>
                       <div style={{ fontFamily:fontHead, fontSize:13, fontWeight:700, color:B.textPrimary }}>{c.name}</div>
-                      <div style={{ fontSize:11, color:B.textMuted }}>{c.suburb} · NET {c.payment_terms_days||14} · {c.credit_status}</div>
+                      <div style={{ fontSize:11, color:B.textMuted }}>{c.suburb} · NET {c.payment_terms_days||14} · {c.account_type||'commercial'} · {c.credit_status||'—'}</div>
                     </div>
                     <span style={{ color:B.textMuted }}>→</span>
                   </button>
                 ))}
               </div>
-              {filteredCustomers.length === 0 && <div style={{ textAlign:'center', padding:'20px', color:B.textMuted, fontSize:13 }}>No matching customers — create the account in Customers first</div>}
+              {filteredCustomers.length === 0 && (
+                <div style={{ textAlign:'center', padding:'20px', color:B.textMuted, fontSize:13 }}>No matching customers found</div>
+              )}
+              <div style={{ marginTop:16, paddingTop:16, borderTop:`1px solid ${B.cardBorder}` }}>
+                <button onClick={()=>setNewCustomerMode(true)}
+                  style={{ width:'100%', background:`${B.yellow}15`, border:`1px dashed ${B.yellow}`, borderRadius:8, padding:'12px', cursor:'pointer', fontFamily:fontHead, fontSize:12, fontWeight:700, color:B.textPrimary, letterSpacing:'0.04em', textTransform:'uppercase' }}>
+                  + Create New Customer Account
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* New customer form */}
+          {step === 'customer' && newCustomerMode && (
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+                <button onClick={()=>setNewCustomerMode(false)} style={{ background:'none', border:'none', color:B.blue, cursor:'pointer', fontSize:13, fontFamily:fontBody, padding:0 }}>← Back to search</button>
+              </div>
+              <div style={{ fontFamily:fontHead, fontSize:14, fontWeight:700, color:B.textPrimary, marginBottom:16, textTransform:'uppercase' }}>New Customer Account</div>
+
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div style={{ gridColumn:'1/-1' }}>
+                  <label style={labelSt}>Business / Customer Name *</label>
+                  <input style={inputStyle} value={newCust.name} onChange={e=>setNC('name',e.target.value)} placeholder="e.g. ABC Constructions Pty Ltd" autoFocus />
+                </div>
+                <div>
+                  <label style={labelSt}>Email</label>
+                  <input style={inputStyle} type="email" value={newCust.email} onChange={e=>setNC('email',e.target.value)} placeholder="accounts@company.com.au" />
+                </div>
+                <div>
+                  <label style={labelSt}>Phone</label>
+                  <input style={inputStyle} value={newCust.phone} onChange={e=>setNC('phone',e.target.value)} placeholder="03 XXXX XXXX" />
+                </div>
+                <div style={{ gridColumn:'1/-1' }}>
+                  <label style={labelSt}>Address</label>
+                  <input style={inputStyle} value={newCust.address} onChange={e=>setNC('address',e.target.value)} placeholder="123 Business Street" />
+                </div>
+                <div>
+                  <label style={labelSt}>Suburb</label>
+                  <input style={inputStyle} value={newCust.suburb} onChange={e=>setNC('suburb',e.target.value)} placeholder="Seaford" />
+                </div>
+                <div>
+                  <label style={labelSt}>Postcode</label>
+                  <input style={inputStyle} value={newCust.postcode} onChange={e=>setNC('postcode',e.target.value)} placeholder="3198" />
+                </div>
+                <div>
+                  <label style={labelSt}>ABN</label>
+                  <input style={inputStyle} value={newCust.abn} onChange={e=>setNC('abn',e.target.value)} placeholder="XX XXX XXX XXX" />
+                </div>
+                <div>
+                  <label style={labelSt}>Account Type</label>
+                  <select style={inputStyle} value={newCust.account_type} onChange={e=>setNC('account_type',e.target.value)}>
+                    {ACCOUNT_TYPE_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div style={{ gridColumn:'1/-1' }}>
+                  <label style={labelSt}>Payment Terms</label>
+                  <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                    {PAYMENT_TERMS_OPTIONS.map(o=>(
+                      <button key={o.value} onClick={()=>setNC('payment_terms_days',o.value)}
+                        style={{ padding:'8px 14px', borderRadius:7, border:`1px solid ${newCust.payment_terms_days===o.value?B.yellow:B.cardBorder}`, background:newCust.payment_terms_days===o.value?`${B.yellow}25`:'transparent', color:newCust.payment_terms_days===o.value?B.textPrimary:B.textSecondary, cursor:'pointer', fontFamily:fontHead, fontSize:11, fontWeight:700, textTransform:'uppercase', whiteSpace:'nowrap' }}>
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop:20, background:`${B.blue}08`, border:`1px solid ${B.blue}30`, borderRadius:8, padding:'10px 14px', fontSize:12, color:B.textSecondary }}>
+                Account will be created as <strong>{ACCOUNT_TYPE_OPTIONS.find(o=>o.value===newCust.account_type)?.label}</strong> with <strong>{PAYMENT_TERMS_OPTIONS.find(o=>o.value===newCust.payment_terms_days)?.label}</strong>.
+                You can complete credit checks, add directors and T&Cs in the Customers tab.
+              </div>
+
+              <button style={{ ...btnPrimary, width:'100%', marginTop:16, opacity:savingCust||!newCust.name.trim()?0.6:1 }}
+                disabled={savingCust||!newCust.name.trim()} onClick={handleCreateCustomer}>
+                {savingCust ? 'Creating Account…' : 'Create Account & Continue →'}
+              </button>
             </div>
           )}
 
@@ -287,11 +407,13 @@ function NewBookingModal({ onClose, customers }) {
 
         {/* Footer */}
         <div style={{ padding:'14px 24px', borderTop:`1px solid ${B.cardBorder}`, display:'flex', gap:10, justifyContent:'space-between', alignItems:'center' }}>
-          <button style={btnSecondary} onClick={()=>{
-            if (step==='details') setStep('service')
-            else if (step==='service') setStep('customer')
-            else onClose()
-          }}>← Back</button>
+          {!newCustomerMode && (
+            <button style={btnSecondary} onClick={()=>{
+              if (step==='details') setStep('service')
+              else if (step==='service') setStep('customer')
+              else onClose()
+            }}>← Back</button>
+          )}
           {step === 'details' && (
             <button style={{ ...btnPrimary, opacity:saving||!form.address||!form.suburb?0.6:1 }}
               disabled={saving||!form.address||!form.suburb}
@@ -305,7 +427,7 @@ function NewBookingModal({ onClose, customers }) {
   )
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Main Component ─────────────────────────���──────────────────────────────────
 export default function CRMBookingsPage() {
   const { isMobile } = useBreakpoint()
   const [showNew, setShowNew] = useState(false)
@@ -313,12 +435,16 @@ export default function CRMBookingsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
+  const [localCustomers, setLocalCustomers] = useState([])
 
   const { data: supabaseCustomers, isError } = useCustomers({})
   const customers = useMemo(() => {
-    if (supabaseCustomers && supabaseCustomers.length > 0 && !isError) return supabaseCustomers
-    return FALLBACK_CUSTOMERS
-  }, [supabaseCustomers, isError])
+    const base = (supabaseCustomers && supabaseCustomers.length > 0 && !isError) ? supabaseCustomers : FALLBACK_CUSTOMERS
+    // Prepend any locally created customers (not yet in the fetched list)
+    const baseIds = new Set(base.map(c=>c.id))
+    const extra = localCustomers.filter(c=>!baseIds.has(c.id))
+    return [...extra, ...base]
+  }, [supabaseCustomers, isError, localCustomers])
 
   React.useEffect(() => {
     const load = async () => {
@@ -423,7 +549,7 @@ export default function CRMBookingsPage() {
         })}
       </div>
 
-      {showNew && <NewBookingModal onClose={()=>setShowNew(false)} customers={customers} />}
+      {showNew && <NewBookingModal onClose={()=>setShowNew(false)} customers={customers} onCustomerCreated={c=>setLocalCustomers(prev=>[c,...prev])} />}
     </div>
   )
 }
