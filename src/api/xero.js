@@ -24,7 +24,10 @@ export async function syncXeroMonth(month) {
   })
 
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || `Sync failed (${res.status})`)
+  if (!res.ok) {
+    if (res.status === 404) throw new Error('Xero sync API not found. Use `vercel dev` for local testing — `npm run dev` does not serve API routes.')
+    throw new Error(data.error || `Sync failed (${res.status})`)
+  }
   return data
 }
 
@@ -47,7 +50,10 @@ export async function syncXeroAllHistory(fromMonth, toMonth) {
   })
 
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || `Bulk sync failed (${res.status})`)
+  if (!res.ok) {
+    if (res.status === 404) throw new Error('Xero sync API not found. Use `vercel dev` for local testing — `npm run dev` does not serve API routes.')
+    throw new Error(data.error || `Bulk sync failed (${res.status})`)
+  }
   return data
 }
 
