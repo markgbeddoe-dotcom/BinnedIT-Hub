@@ -172,6 +172,13 @@ export default function SettingsPage() {
   const [xeroSyncMonth, setXeroSyncMonth] = useState('2026-02');
   const [xeroSyncResult, setXeroSyncResult] = useState(null);
   const [xeroSyncLog, setXeroSyncLog] = useState([]);
+
+  // Claude AI settings
+  const [claudeKey, setClaudeKey] = useState('');
+  const [claudeKeyShow, setClaudeKeyShow] = useState(false);
+  const [claudeKeySaving, setClaudeKeySaving] = useState(false);
+  const [claudeKeyStatus, setClaudeKeyStatus] = useState(null); // null | 'saved' | 'error' | 'testing' | 'ok' | 'fail'
+  const [claudeKeyStored, setClaudeKeyStored] = useState(null); // masked value from DB
   const [xeroHistoryFrom, setXeroHistoryFrom] = useState('2025-07');
   const [xeroHistoryTo, setXeroHistoryTo] = useState('2026-02');
   const [xeroHistorySyncing, setXeroHistorySyncing] = useState(false);
@@ -225,7 +232,21 @@ export default function SettingsPage() {
   useEffect(() => {
     getXeroStatus().then(setXeroStatus).catch(() => setXeroStatus({ connected: false }));
     getXeroSyncLog().then(setXeroSyncLog).catch(() => {});
-  }, []);
+    // Load stored Claude API key (masked)
+    if (isOwner) {
+      import('../lib/supabase').then(({ supabase }) => {
+        supabase.from('platform_settings').select('value').eq('key', 'anthropic_api_key').maybeSingle()
+          .then(({ data }) => {
+            if (data?.value) {
+              const v = data.value
+              setClaudeKeyStored('sk-ant-…' + v.slice(-6))
+            } else {
+              setClaudeKeyStored('(using environment variable)')
+            }
+          }).catch(() => {})
+      })
+    }
+  }, [isOwner]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -672,6 +693,94 @@ export default function SettingsPage() {
 
       {/* White-Label Booking Widget */}
       {isOwner && <WhiteLabelWidget />}
+
+      {/* Claude AI Configuration */}
+      {isOwner && (
+        <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <span style={{ fontSize: 20 }}>🤖</span>
+            <div style={{ fontFamily: fontHead, fontSize: 14, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase' }}>Claude AI Configuration</div>
+          </div>
+          <p style={{ fontSize: 13, color: B.textMuted, marginBottom: 20, lineHeight: 1.6 }}>
+            The API key used for the AI Chat assistant. When a key is saved here it overrides the environment variable — useful for rotating keys without a redeploy.
+          </p>
+
+          {/* Current key status */}
+          <div style={{ background: B.bg, borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: B.textSecondary }}>
+            <span style={{ color: B.textMuted }}>Current key: </span>
+            <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{claudeKeyStored || 'Loading…'}</span>
+          </div>
+
+          {/* New key input */}
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ display: 'block', fontSize: 11, color: B.textMuted, fontFamily: fontHead, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+              Update API Key
+            </label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type={claudeKeyShow ? 'text' : 'password'}
+                value={claudeKey}
+                onChange={e => setClaudeKey(e.target.value)}
+                placeholder="sk-ant-api03-…"
+                style={{ ...iStyle, flex: 1, fontFamily: 'monospace', fontSize: 12 }}
+              />
+              <button onClick={() => setClaudeKeyShow(s => !s)}
+                style={{ background: 'none', border: `1px solid ${B.cardBorder}`, borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: 11, color: B.textSecondary, fontFamily: fontBody }}>
+                {claudeKeyShow ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              disabled={claudeKeySaving || !claudeKey.startsWith('sk-ant-')}
+              onClick={async () => {
+                setClaudeKeySaving(true)
+                setClaudeKeyStatus(null)
+                try {
+                  const { supabase } = await import('../lib/supabase')
+                  const { error } = await supabase.from('platform_settings').upsert({ key: 'anthropic_api_key', value: claudeKey.trim(), updated_at: new Date().toISOString() })
+                  if (error) throw error
+                  setClaudeKeyStored('sk-ant-…' + claudeKey.trim().slice(-6))
+                  setClaudeKey('')
+                  setClaudeKeyStatus('saved')
+                } catch (e) {
+                  setClaudeKeyStatus('error')
+                } finally {
+                  setClaudeKeySaving(false)
+                }
+              }}
+              style={{ background: B.yellow, border: 'none', borderRadius: 7, padding: '8px 18px', cursor: 'pointer', fontFamily: fontHead, fontSize: 12, fontWeight: 700, color: B.black, opacity: claudeKeySaving || !claudeKey.startsWith('sk-ant-') ? 0.5 : 1 }}>
+              {claudeKeySaving ? 'Saving…' : 'Save Key'}
+            </button>
+
+            <button
+              onClick={async () => {
+                setClaudeKeyStatus('testing')
+                try {
+                  const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages: [{ role: 'user', content: 'Reply with just the word PONG.' }] }),
+                  })
+                  setClaudeKeyStatus(res.ok ? 'ok' : 'fail')
+                } catch { setClaudeKeyStatus('fail') }
+              }}
+              style={{ background: 'none', border: `1px solid ${B.cardBorder}`, borderRadius: 7, padding: '8px 16px', cursor: 'pointer', fontFamily: fontHead, fontSize: 12, color: B.textSecondary }}>
+              {claudeKeyStatus === 'testing' ? 'Testing…' : 'Test Connection'}
+            </button>
+
+            {claudeKeyStatus === 'saved' && <span style={{ fontSize: 12, color: B.green, fontWeight: 600 }}>✓ Key saved</span>}
+            {claudeKeyStatus === 'error' && <span style={{ fontSize: 12, color: B.red }}>✗ Save failed</span>}
+            {claudeKeyStatus === 'ok' && <span style={{ fontSize: 12, color: B.green, fontWeight: 600 }}>✓ Connection OK</span>}
+            {claudeKeyStatus === 'fail' && <span style={{ fontSize: 12, color: B.red }}>✗ Connection failed — check key</span>}
+          </div>
+
+          <p style={{ fontSize: 11, color: B.textMuted, marginTop: 14, lineHeight: 1.5 }}>
+            Key is stored encrypted at rest in Supabase and readable only by users with owner role. The environment variable remains as a fallback if no database key is set.
+          </p>
+        </div>
+      )}
 
       {/* Company Info */}
       <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24 }}>

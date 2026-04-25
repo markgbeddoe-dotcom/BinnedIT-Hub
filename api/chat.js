@@ -51,9 +51,23 @@ export default async function handler(req) {
     })
   }
 
-  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
   const SUPABASE_URL = process.env.SUPABASE_URL
   const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  // Check platform_settings for a key override; fall back to env var
+  let ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
+  if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const psRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/platform_settings?key=eq.anthropic_api_key&select=value&limit=1`,
+        { headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` } }
+      )
+      if (psRes.ok) {
+        const ps = await psRes.json()
+        if (ps.length > 0 && ps[0].value) ANTHROPIC_API_KEY = ps[0].value
+      }
+    } catch { /* non-fatal — use env var */ }
+  }
 
   if (!ANTHROPIC_API_KEY) {
     return new Response(JSON.stringify({ error: 'AI service not configured' }), {

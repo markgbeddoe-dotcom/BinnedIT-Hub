@@ -1,9 +1,9 @@
 // SkipSync brand — dark operations-first layout
 export const B = {
-  bg:'#F2F6F4',           // off-white page background
+  bg:'#D8E5DF',           // page background — deep enough to contrast clearly with white cards
   cardBg:'#FFFFFF',
-  cardBgHover:'#F8FAF9',
-  cardBorder:'#D8DDD9',
+  cardBgHover:'#F4FAF7',
+  cardBorder:'#A8B8B0',   // visible card/table borders — was #D8DDD9
   headerBg:'#000006',     // industrial black (headers, sidebar, nav)
   slateBg:'#1A1A2E',      // slate (secondary backgrounds)
   yellow:'#EFDF0F',       // primary yellow (CTAs, highlights, active states)
@@ -11,9 +11,9 @@ export const B = {
   yellowLight:'#FFFDE0',
   white:'#FFFFFF',
   black:'#000006',
-  textPrimary:'#000006',
-  textSecondary:'#3D3D4F',
-  textMuted:'#6B7280',
+  textPrimary:'#0A1610',  // near-black with green tint — was #000006
+  textSecondary:'#1E3028', // dark green-grey — was #3D3D4F
+  textMuted:'#4A5E56',    // readable muted — was #6B7280
   green:'#27AE60',        // success
   red:'#E74C3C',          // alert
   amber:'#F39C12',        // warning orange
