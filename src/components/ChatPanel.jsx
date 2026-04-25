@@ -65,6 +65,7 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
       });
 
       if (!response.ok) {
+        if (response.status === 404) throw new Error('AI Chat unavailable in local dev — run `vercel dev` instead of `npm run dev`, or use the live app at binnedit-hub.vercel.app')
         const errData = await response.json().catch(() => ({}));
         throw new Error(errData.error || `HTTP ${response.status}`);
       }

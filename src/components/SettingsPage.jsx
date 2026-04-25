@@ -177,8 +177,9 @@ export default function SettingsPage() {
   const [claudeKey, setClaudeKey] = useState('');
   const [claudeKeyShow, setClaudeKeyShow] = useState(false);
   const [claudeKeySaving, setClaudeKeySaving] = useState(false);
+  const [claudeKeyDeleting, setClaudeKeyDeleting] = useState(false);
   const [claudeKeyStatus, setClaudeKeyStatus] = useState(null); // null | 'saved' | 'error' | 'testing' | 'ok' | 'fail'
-  const [claudeKeyStored, setClaudeKeyStored] = useState(null); // masked value from DB
+  const [claudeKeyStored, setClaudeKeyStored] = useState(undefined); // undefined=loading, null=none, string=masked key
   const [xeroHistoryFrom, setXeroHistoryFrom] = useState('2025-07');
   const [xeroHistoryTo, setXeroHistoryTo] = useState('2026-02');
   const [xeroHistorySyncing, setXeroHistorySyncing] = useState(false);
@@ -236,14 +237,10 @@ export default function SettingsPage() {
     if (isOwner) {
       import('../lib/supabase').then(({ supabase }) => {
         supabase.from('platform_settings').select('value').eq('key', 'anthropic_api_key').maybeSingle()
-          .then(({ data }) => {
-            if (data?.value) {
-              const v = data.value
-              setClaudeKeyStored('sk-ant-…' + v.slice(-6))
-            } else {
-              setClaudeKeyStored('(using environment variable)')
-            }
-          }).catch(() => {})
+          .then(({ data, error }) => {
+            if (error) { setClaudeKeyStored(null); return; }
+            setClaudeKeyStored(data?.value ? 'sk-ant-…' + data.value.slice(-6) : null)
+          }).catch(() => setClaudeKeyStored(null))
       })
     }
   }, [isOwner]);
@@ -707,8 +704,10 @@ export default function SettingsPage() {
 
           {/* Current key status */}
           <div style={{ background: B.bg, borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: B.textSecondary }}>
-            <span style={{ color: B.textMuted }}>Current key: </span>
-            <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{claudeKeyStored || 'Loading…'}</span>
+            <span style={{ color: B.textMuted }}>Stored key: </span>
+            {claudeKeyStored === undefined && <span style={{ color: B.textMuted, fontStyle: 'italic' }}>Loading…</span>}
+            {claudeKeyStored === null && <span style={{ color: B.textMuted, fontStyle: 'italic' }}>None — using environment variable</span>}
+            {claudeKeyStored && <span style={{ fontFamily: 'monospace', fontWeight: 600, color: B.green }}>{claudeKeyStored}</span>}
           </div>
 
           {/* New key input */}
@@ -739,13 +738,17 @@ export default function SettingsPage() {
                 setClaudeKeyStatus(null)
                 try {
                   const { supabase } = await import('../lib/supabase')
-                  const { error } = await supabase.from('platform_settings').upsert({ key: 'anthropic_api_key', value: claudeKey.trim(), updated_at: new Date().toISOString() })
+                  const { error } = await supabase.from('platform_settings').upsert(
+                    { key: 'anthropic_api_key', value: claudeKey.trim(), updated_at: new Date().toISOString() },
+                    { onConflict: 'key' }
+                  )
                   if (error) throw error
                   setClaudeKeyStored('sk-ant-…' + claudeKey.trim().slice(-6))
                   setClaudeKey('')
                   setClaudeKeyStatus('saved')
                 } catch (e) {
                   setClaudeKeyStatus('error')
+                  console.error('Claude key save error:', e)
                 } finally {
                   setClaudeKeySaving(false)
                 }
@@ -763,6 +766,7 @@ export default function SettingsPage() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ messages: [{ role: 'user', content: 'Reply with just the word PONG.' }] }),
                   })
+                  if (res.status === 404) { setClaudeKeyStatus('local'); return; }
                   setClaudeKeyStatus(res.ok ? 'ok' : 'fail')
                 } catch { setClaudeKeyStatus('fail') }
               }}
@@ -770,14 +774,38 @@ export default function SettingsPage() {
               {claudeKeyStatus === 'testing' ? 'Testing…' : 'Test Connection'}
             </button>
 
+            {claudeKeyStored && (
+              <button
+                disabled={claudeKeyDeleting}
+                onClick={async () => {
+                  if (!window.confirm('Remove stored key? The system will fall back to the environment variable.')) return;
+                  setClaudeKeyDeleting(true)
+                  try {
+                    const { supabase } = await import('../lib/supabase')
+                    const { error } = await supabase.from('platform_settings').delete().eq('key', 'anthropic_api_key')
+                    if (error) throw error
+                    setClaudeKeyStored(null)
+                    setClaudeKeyStatus(null)
+                  } catch (e) {
+                    console.error('Claude key delete error:', e)
+                  } finally {
+                    setClaudeKeyDeleting(false)
+                  }
+                }}
+                style={{ background: 'none', border: `1px solid ${B.red}60`, borderRadius: 7, padding: '8px 14px', cursor: 'pointer', fontFamily: fontHead, fontSize: 11, color: B.red, opacity: claudeKeyDeleting ? 0.5 : 1 }}>
+                {claudeKeyDeleting ? 'Removing…' : 'Remove Key'}
+              </button>
+            )}
+
             {claudeKeyStatus === 'saved' && <span style={{ fontSize: 12, color: B.green, fontWeight: 600 }}>✓ Key saved</span>}
-            {claudeKeyStatus === 'error' && <span style={{ fontSize: 12, color: B.red }}>✗ Save failed</span>}
+            {claudeKeyStatus === 'error' && <span style={{ fontSize: 12, color: B.red }}>✗ Save failed — check browser console</span>}
             {claudeKeyStatus === 'ok' && <span style={{ fontSize: 12, color: B.green, fontWeight: 600 }}>✓ Connection OK</span>}
             {claudeKeyStatus === 'fail' && <span style={{ fontSize: 12, color: B.red }}>✗ Connection failed — check key</span>}
+            {claudeKeyStatus === 'local' && <span style={{ fontSize: 12, color: B.amber }}>⚠ Run <code>vercel dev</code> to test locally — works fine on the live app</span>}
           </div>
 
           <p style={{ fontSize: 11, color: B.textMuted, marginTop: 14, lineHeight: 1.5 }}>
-            Key is stored encrypted at rest in Supabase and readable only by users with owner role. The environment variable remains as a fallback if no database key is set.
+            Key is stored in Supabase and readable only by users with the owner role. The Vercel environment variable acts as a fallback when no key is stored here.
           </p>
         </div>
       )}
