@@ -101,63 +101,119 @@ function sectionTotal(section) {
 
 function mapPLToFinancials(sections, month) {
   // ── Revenue ───────────────────────────────────────────────────────────────────
-  // Xero splits revenue into 'revenue - <category>' sub-sections under a parent 'income' section.
-  // Aggregate all 'revenue - *' keys; use 'income' _total as rev_total if it has one.
+  // Primary: Xero may split revenue into 'revenue - <category>' sub-sections.
+  // Fallback: Binned-IT uses a single flat 'trading income' section with all SKU rows.
+  // Debug: log all section keys so we can verify the mapping is correct.
+  console.log('XERO_PL_SECTION_KEYS:', JSON.stringify(Object.keys(sections)))
+
   const revSubKeys = Object.keys(sections).filter(k => k.startsWith('revenue -'))
+  const hasTradingIncome = !!sections['trading income']
 
-  const revAsbestos = revSubKeys
-    .filter(k => k.includes('asbestos'))
-    .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
+  let revAsbestos = 0, revSoil = 0, revGreen = 0, revOther = 0
 
-  const revSoil = revSubKeys
-    .filter(k => k.includes('soil') || k.includes('contaminated'))
-    .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
+  if (revSubKeys.length > 0) {
+    // Standard Xero structure: 'revenue - asbestos', 'revenue - soil', etc.
+    revAsbestos = revSubKeys
+      .filter(k => k.includes('asbestos'))
+      .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
 
-  const revGreen = revSubKeys
-    .filter(k => k.includes('green'))
-    .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
+    revSoil = revSubKeys
+      .filter(k => k.includes('soil') || k.includes('contaminated'))
+      .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
 
-  const revOther = revSubKeys
-    .filter(k => !k.includes('asbestos') && !k.includes('soil') && !k.includes('contaminated') && !k.includes('green'))
-    .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
+    revGreen = revSubKeys
+      .filter(k => k.includes('green'))
+      .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
 
-  // Always sum individual 'revenue - *' sub-sections; the 'income' section _total
-  // is NET income (after costs) in Xero's P&L structure, not gross revenue.
+    revOther = revSubKeys
+      .filter(k => !k.includes('asbestos') && !k.includes('soil') && !k.includes('contaminated') && !k.includes('green'))
+      .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
+  } else if (hasTradingIncome) {
+    // Binned-IT fallback: single 'trading income' section with all SKU line items.
+    // Classify each row by name keyword into the revenue sub-categories.
+    const tradingRows = sections['trading income']._rows
+    for (const row of tradingRows) {
+      const n = row.name.toLowerCase()
+      const amt = Math.abs(row.amount)
+      if (n.includes('asb') || n.includes('asbestos')) {
+        revAsbestos += amt
+      } else if (n.includes('soil') || n.includes('soi') || n.includes('contaminated') || n.includes('csoil')) {
+        revSoil += amt
+      } else if (n.includes('grw') || n.includes('green')) {
+        revGreen += amt
+      } else {
+        revOther += amt
+      }
+    }
+    console.log('XERO_PL_REVENUE_FALLBACK: using trading income section rows to classify revenue')
+  } else {
+    // Last-resort: try 'income' section (some Xero accounts use this label)
+    const incomeSection = sections['income'] || { _rows: [] }
+    revOther = Math.abs(sectionTotal(incomeSection))
+    console.log('XERO_PL_REVENUE_FALLBACK: using income section, total =', revOther)
+  }
+
+  // Always sum individual revenue sub-categories for rev_total.
   const revTotal = revAsbestos + revSoil + revGreen + revOther
 
   // ── Cost of Sales ─────────────────────────────────────────────────────────────
-  // 'less cost of sales' — values may be stored as negative; use Math.abs
-  const cosSection = sections['less cost of sales'] || { _total: 0, _rows: [] }
-  const cosTotal   = Math.abs(sectionTotal(cosSection))
-  const cosRows    = cosSection._rows
+  // Primary: 'less cost of sales'  (some Xero accounts prefix with 'less')
+  // Fallback: 'cost of sales'      (Binned-IT actual section name)
+  // Last-resort: 'cost of goods sold'
+  const cosSection =
+    sections['less cost of sales'] ||
+    sections['cost of sales']      ||
+    sections['cost of goods sold'] ||
+    { _total: 0, _rows: [] }
 
+  if (!sections['less cost of sales'] && sections['cost of sales']) {
+    console.log('XERO_PL_COS_FALLBACK: matched "cost of sales" (not "less cost of sales")')
+  }
+
+  const cosTotal = Math.abs(sectionTotal(cosSection))
+  const cosRows  = cosSection._rows
+
+  // For Binned-IT: wages/payroll are under OPEX (Operating Expenses), NOT COS.
+  // COS contains: recycling costs, tipping costs, bin-specific disposal fees.
   const cosWages    = Math.abs(sumByKeywords(cosRows, 'wage', 'driver', 'labour', 'labor'))
   const cosFuel     = Math.abs(sumByKeywords(cosRows, 'fuel', 'petrol', 'diesel'))
-  const cosDisposal = Math.abs(sumByKeywords(cosRows, 'tip', 'disposal', 'landfill', 'waste levy', 'tipping'))
+  const cosDisposal = Math.abs(sumByKeywords(cosRows, 'tip', 'disposal', 'landfill', 'waste levy', 'tipping', 'recycling'))
   const cosOther    = Math.max(0, cosTotal - cosWages - cosFuel - cosDisposal)
 
   // ── Operating Expenses ────────────────────────────────────────────────────────
-  // Three sections combined: 'less operating expenses', 'other overheads', 'staffing overheads'
-  const opexMainSection  = sections['less operating expenses'] || { _total: 0, _rows: [] }
-  const opexOtherSection = sections['other overheads']         || { _total: 0, _rows: [] }
-  const opexStaffSection = sections['staffing overheads']      || { _total: 0, _rows: [] }
+  // Primary: 'less operating expenses'  (some Xero accounts prefix with 'less')
+  // Fallback: 'operating expenses'      (Binned-IT actual section name)
+  // Also check for supplementary sections: 'other overheads', 'staffing overheads'
+  const opexMainSection =
+    sections['less operating expenses'] ||
+    sections['operating expenses']      ||
+    sections['expenses']               ||
+    { _total: 0, _rows: [] }
+
+  if (!sections['less operating expenses'] && sections['operating expenses']) {
+    console.log('XERO_PL_OPEX_FALLBACK: matched "operating expenses" (not "less operating expenses")')
+  }
+
+  const opexOtherSection = sections['other overheads']   || { _total: 0, _rows: [] }
+  const opexStaffSection = sections['staffing overheads'] || { _total: 0, _rows: [] }
 
   const opexMainTotal  = Math.abs(sectionTotal(opexMainSection))
   const opexOtherTotal = Math.abs(sectionTotal(opexOtherSection))
   const opexStaffTotal = Math.abs(sectionTotal(opexStaffSection))
   const opexTotal      = opexMainTotal + opexOtherTotal + opexStaffTotal
 
-  // staffing overheads → opex_admin (wages/staff)
-  const opexAdmin = opexStaffTotal
+  // staffing overheads → opex_admin (wages/staff); otherwise pull wages from main opex rows
+  const opexRows     = opexMainSection._rows
+  const opexWages    = opexStaffTotal > 0 ? opexStaffTotal : Math.abs(sumByKeywords(opexRows, 'wage', 'salary', 'super', 'payroll'))
+  const opexAdmin    = opexWages
 
-  // 'less operating expenses' rows → rent, insurance, advertising
-  const opexRows   = opexMainSection._rows
+  // 'less operating expenses' / 'operating expenses' rows → rent, insurance, advertising
   const opexRent   = Math.abs(sumByKeywords(opexRows, 'rent', 'lease'))
   const opexAdvert = Math.abs(sumByKeywords(opexRows, 'adverti', 'market', 'promo'))
   const opexInsur  = Math.abs(sumByKeywords(opexRows, 'insur'))
 
-  // opex_other = 'other overheads' total + unclassified rows from 'less operating expenses'
-  const opexMainKnown = opexRent + opexAdvert + opexInsur
+  // opex_other = 'other overheads' total + unclassified rows from main opex section
+  const opexMainKnown = opexWages + opexRent + opexAdvert + opexInsur
   const opexOther = opexOtherTotal + Math.max(0, opexMainTotal - opexMainKnown)
 
   // ── Derived ───────────────────────────────────────────────────────────────────

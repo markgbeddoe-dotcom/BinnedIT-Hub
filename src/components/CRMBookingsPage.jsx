@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react'
 import { B, fontHead, fontBody, fmtFull } from '../theme'
 import { useBreakpoint } from '../hooks/useBreakpoint'
 import { useCustomers } from '../hooks/useCustomers'
+import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 
 // ── Service Matrix ────────────────────────────────────────────────────────────
@@ -427,15 +428,20 @@ function NewBookingModal({ onClose, customers, onCustomerCreated }) {
   )
 }
 
-// ── Main Component ─────────────────────────���──────────────────────────────────
+// ── Main Component ────────────────────────────────────────────────────────────
 export default function CRMBookingsPage() {
   const { isMobile } = useBreakpoint()
+  const { isOwner, isBookkeeper } = useAuth()
+  const canCreateInvoice = isOwner || isBookkeeper
+
   const [showNew, setShowNew] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
   const [localCustomers, setLocalCustomers] = useState([])
+  const [invoiceLoading, setInvoiceLoading] = useState({}) // bookingId → true/false
+  const [invoiceMsg, setInvoiceMsg] = useState({})         // bookingId → { ok, text }
 
   const { data: supabaseCustomers, isError } = useCustomers({})
   const customers = useMemo(() => {
@@ -459,6 +465,36 @@ export default function CRMBookingsPage() {
     }
     load()
   }, [search, statusFilter])
+
+  async function handleCreateXeroInvoice(bookingId) {
+    setInvoiceLoading(prev => ({ ...prev, [bookingId]: true }))
+    setInvoiceMsg(prev => ({ ...prev, [bookingId]: null }))
+    try {
+      const session = await supabase.auth.getSession()
+      const token   = session?.data?.session?.access_token
+      const res     = await fetch('/api/xero-invoice', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        // Refresh the booking row so the xero_invoice_id shows immediately
+        setBookings(prev => prev.map(b =>
+          b.id === bookingId
+            ? { ...b, xero_invoice_id: data.invoiceId, xero_invoice_status: 'DRAFT' }
+            : b
+        ))
+        setInvoiceMsg(prev => ({ ...prev, [bookingId]: { ok: true, text: `Invoice ${data.invoiceNumber} created in Xero` } }))
+      } else {
+        setInvoiceMsg(prev => ({ ...prev, [bookingId]: { ok: false, text: data.error || 'Failed to create invoice' } }))
+      }
+    } catch (err) {
+      setInvoiceMsg(prev => ({ ...prev, [bookingId]: { ok: false, text: err.message } }))
+    } finally {
+      setInvoiceLoading(prev => ({ ...prev, [bookingId]: false }))
+    }
+  }
 
   const STATUS_CFG = {
     pending:    { color:B.amber,   bg:`${B.amber}15`   },
@@ -528,19 +564,41 @@ export default function CRMBookingsPage() {
       <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
         {bookings.map(b => {
           const cfg = STATUS_CFG[b.status] || STATUS_CFG.pending
+          const isCompleted = b.status === 'completed'
+          const hasInvoice  = !!b.xero_invoice_id
+          const isCreating  = !!invoiceLoading[b.id]
+          const msg         = invoiceMsg[b.id]
           return (
-            <div key={b.id} style={{ ...cardBorder, display:'flex', alignItems:'center', gap:14 }}>
+            <div key={b.id} style={{ ...cardBorder, display:'flex', alignItems:'center', gap:14, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
               <div style={{ width:8, height:8, borderRadius:'50%', background:cfg.color, flexShrink:0 }} />
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontFamily:fontHead, fontSize:14, fontWeight:700, color:B.textPrimary, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                   {b.customers?.name || b.customer_name}
                 </div>
                 <div style={{ fontSize:11, color:B.textMuted }}>{b.bin_size} · {b.waste_type} · {b.suburb}</div>
+                {msg && (
+                  <div style={{ fontSize:11, color: msg.ok ? B.green : B.red, marginTop:3, fontWeight:600 }}>{msg.text}</div>
+                )}
               </div>
               {!isMobile && <>
                 <div style={{ fontSize:12, color:B.textSecondary, minWidth:80 }}>{fmtDate(b.delivery_date)}</div>
                 {b.price > 0 && <div style={{ fontSize:13, fontWeight:700, color:B.textPrimary, minWidth:70, textAlign:'right' }}>${b.price} ex GST</div>}
               </>}
+              {/* Xero invoice column — only for completed bookings when user can create invoices */}
+              {canCreateInvoice && isCompleted && (
+                hasInvoice ? (
+                  <span style={{ display:'inline-flex', alignItems:'center', background:`${B.cyan}18`, color:B.cyan, fontFamily:fontHead, fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:4, textTransform:'uppercase', whiteSpace:'nowrap', letterSpacing:'0.05em' }}>
+                    Xero ✓
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => handleCreateXeroInvoice(b.id)}
+                    disabled={isCreating}
+                    style={{ background:`${B.cyan}18`, border:`1px solid ${B.cyan}60`, color:B.cyan, borderRadius:6, padding:'4px 10px', cursor: isCreating ? 'not-allowed' : 'pointer', fontFamily:fontHead, fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.05em', whiteSpace:'nowrap', opacity: isCreating ? 0.6 : 1, flexShrink:0 }}>
+                    {isCreating ? 'Creating…' : '+ Xero Invoice'}
+                  </button>
+                )
+              )}
               <span style={{ display:'inline-flex', alignItems:'center', background:cfg.bg, color:cfg.color, fontFamily:fontHead, fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:4, textTransform:'uppercase', whiteSpace:'nowrap' }}>
                 {b.status.replace('_',' ')}
               </span>
