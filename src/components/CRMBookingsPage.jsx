@@ -92,11 +92,11 @@ function minCollection(del) {
 }
 
 const FALLBACK_CUSTOMERS = [
-  { id:'f1', name:'Remeed Solutions', email:'accounts@remeed.com.au', suburb:'Seaford', payment_terms_days:30, account_type:'account', credit_status:'approved' },
-  { id:'f2', name:'Fieldmans Waste', email:'billing@fieldmans.com.au', suburb:'Frankston', payment_terms_days:14, account_type:'account', credit_status:'approved' },
-  { id:'f3', name:'Roach Demolition', email:'office@roachdemo.com.au', suburb:'Seaford', payment_terms_days:14, account_type:'account', credit_status:'review' },
+  { id:'f1', name:'Remeed Solutions', email:'accounts@remeed.com.au', suburb:'Seaford', payment_terms_days:30, account_type:'account', credit_status:'unrated' },
+  { id:'f2', name:'Fieldmans Waste', email:'billing@fieldmans.com.au', suburb:'Frankston', payment_terms_days:14, account_type:'account', credit_status:'unrated' },
+  { id:'f3', name:'Roach Demolition', email:'office@roachdemo.com.au', suburb:'Seaford', payment_terms_days:14, account_type:'account', credit_status:'unrated' },
   { id:'f4', name:"Scotty's Suburban", email:'scott@suburbankip.com.au', suburb:'Carrum Downs', payment_terms_days:7, account_type:'commercial', credit_status:'unrated' },
-  { id:'f5', name:'Melbourne Grammar School', email:'facilities@melgrammar.vic.edu.au', suburb:'South Yarra', payment_terms_days:30, account_type:'account', credit_status:'approved' },
+  { id:'f5', name:'Melbourne Grammar School', email:'facilities@melgrammar.vic.edu.au', suburb:'South Yarra', payment_terms_days:30, account_type:'account', credit_status:'unrated' },
 ]
 
 const inputStyle = { width:'100%', boxSizing:'border-box', border:`1px solid ${B.cardBorder}`, borderRadius:6, padding:'8px 10px', fontSize:13, fontFamily:fontBody, color:B.textPrimary, background:B.cardBg, outline:'none' }
@@ -182,6 +182,7 @@ function NewBookingModal({ onClose, customers, onCustomerCreated }) {
         waste_type: selectedService.category,
         price: selectedService.poa ? 0 : selectedService.price,
         delivery_date: form.delivery_date,
+        scheduled_date: form.delivery_date,
         collection_date: form.collection_date || null,
         special_instructions: form.special_instructions,
         notes: form.notes,
