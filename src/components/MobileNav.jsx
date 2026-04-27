@@ -2,11 +2,12 @@ import React from 'react';
 import { B, fontHead } from '../theme';
 
 const NAV_ITEMS = [
-  { id: 'home', screen: 'home', icon: '🏠', label: 'Home' },
-  { id: 'dashboard', screen: 'dashboard', icon: '📊', label: 'Dashboard' },
-  { id: 'alerts', screen: null, icon: '🔔', label: 'Alerts' },
-  { id: 'workplan', screen: 'dashboard', tab: 'workplan', icon: '📋', label: 'Work Plan' },
-  { id: 'chat', screen: null, icon: '💬', label: 'Chat' },
+  { id: 'home',        screen: 'home',        icon: '🏠',  label: 'Home' },
+  { id: 'dispatch',    screen: 'dispatch',    icon: '🗂️',  label: 'Dispatch' },
+  { id: 'bookings',    screen: 'bookings',    icon: '📅',  label: 'Bookings' },
+  { id: 'collections', screen: 'collections', icon: '⚖️',  label: 'Collections' },
+  { id: 'dashboard',   screen: 'dashboard',   icon: '📊',  label: 'Reports' },
+  { id: 'chat',        screen: null,          icon: '💬',  label: 'Chat' },
 ];
 
 export default function MobileNav({ currentScreen, currentTab, alertCount, onNavigate, onChatOpen, chatOpen }) {

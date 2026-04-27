@@ -277,8 +277,8 @@ function parseBalanceSheet(report) {
         const amount = parseAmount(r.Cells?.[1]?.Value)
 
         if (r.RowType === 'SummaryRow') {
-          if (title.includes('asset'))    totalAssets = amount
-          if (title.includes('liabilit')) totalLiabilities = amount
+          if (title.includes('asset'))    totalAssets += Math.abs(amount)
+          if (title.includes('liabilit')) totalLiabilities += Math.abs(amount)
           if (title.includes('equity'))   equity = amount
         } else {
           if (name.includes('cash') || name.includes('bank') || name.includes('westpac')) cash += amount

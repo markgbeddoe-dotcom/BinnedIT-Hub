@@ -62,6 +62,7 @@ const tiles = [
   { id:"bookings", icon:"📅", title:"Bookings", desc:"Manage bin hire bookings & schedules", sub:"Operations", color:B.blue },
   { id:"invoices", icon:"🧾", title:"Invoices", desc:"Auto-generated invoices, payment tracking & chasing", sub:"Finance", color:B.green },
   { id:"customers", icon:"👥", title:"Customers", desc:"CRM — accounts, job history & churn risk", sub:"10 accounts loaded", color:B.cyan },
+  { id:"collections", icon:"⚖️", title:"Collections", desc:"Overdue accounts — escalating demand letters & legal action", sub:"AR enforcement", color:B.red },
   { id:"fleet", icon:"🚛", title:"Fleet", desc:"Vehicles, bin inventory & maintenance log", sub:"Jake's operations module", color:B.amber },
   { id:"dashboard", icon:"📊", title:"Financial Reports", desc:"Current month's P&L, KPIs and analysis", sub:"Select month to view", color:B.purple },
   { id:"generate", icon:"🔧", title:"Load Data", desc:"12-step guided wizard", sub:"Upload files + manual input", color:B.purple },

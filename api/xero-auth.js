@@ -24,6 +24,7 @@ export default async function handler(req) {
     'accounting.reports.balancesheet.read',
     'accounting.reports.aged.read',
     'accounting.contacts.read',
+    'accounting.transactions',
   ].join(' ')
   const state = crypto.randomUUID()
 

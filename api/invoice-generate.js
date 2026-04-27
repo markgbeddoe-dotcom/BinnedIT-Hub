@@ -148,10 +148,10 @@ export default async function handler(req) {
       })
     }
 
-    // 3. Calculate amounts (booking.price is total inc-GST)
-    const totalIncGst = parseFloat(booking.price || booking.estimated_cost || 0)
-    const gst         = Math.round((totalIncGst / 11) * 100) / 100
-    const amount      = Math.round((totalIncGst - gst) * 100) / 100
+    // 3. Calculate amounts (booking.price is ex-GST; add 10% to get total)
+    const amount      = Math.round(parseFloat(booking.price || booking.estimated_cost || 0) * 100) / 100
+    const gst         = Math.round(amount * 0.1 * 100) / 100
+    const totalIncGst = Math.round((amount + gst) * 100) / 100
 
     // 4. Due date: 14 days net
     const dueDateObj = new Date()
