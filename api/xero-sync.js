@@ -438,9 +438,13 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
     fetchBalanceSheet(accessToken, tenantId, toDate),
   ])
 
-  // AR is disabled — AgedReceivablesByContact requires a contactID param (per-contact
-  // report, not a summary). Needs rework to fetch per-contact and aggregate. See Xero docs.
-  const arReport = null
+  // AR: fetch all-contacts aged receivables summary (no contactID needed for summary view)
+  let arReport = null
+  try {
+    arReport = await fetchAgedReceivables(accessToken, tenantId, fromDate, toDate)
+  } catch (arErr) {
+    console.warn('XERO_AR_FETCH_WARN: AR fetch failed (non-fatal):', arErr.message)
+  }
 
   const plSections  = parsePLSections(plReport)
   const financials  = mapPLToFinancials(plSections, month)
