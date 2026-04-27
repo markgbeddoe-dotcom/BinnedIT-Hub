@@ -449,8 +449,11 @@ export default function DispatchBoard() {
       </div>
 
       {/* ── Kanban board ── */}
+      {isMobile && (
+        <div style={{ fontSize: 11, color: D.textMuted, marginBottom: 8, fontStyle: 'italic' }}>← Swipe to see all columns →</div>
+      )}
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div style={{ display: 'flex', gap: 14, overflowX: 'auto', alignItems: 'flex-start', paddingBottom: 24 }}>
+        <div style={{ display: 'flex', gap: 14, overflowX: 'auto', alignItems: 'flex-start', paddingBottom: 24, WebkitOverflowScrolling: 'touch' }}>
           {COLUMNS.map(col => (
             <KanbanColumn
               key={col.id}

@@ -4,8 +4,8 @@ import { B, fontHead } from '../theme';
 const NAV_ITEMS = [
   { id: 'home',        screen: 'home',        icon: '🏠',  label: 'Home' },
   { id: 'dispatch',    screen: 'dispatch',    icon: '🗂️',  label: 'Dispatch' },
-  { id: 'bookings',    screen: 'bookings',    icon: '📅',  label: 'Bookings' },
-  { id: 'collections', screen: 'collections', icon: '⚖️',  label: 'Collections' },
+  { id: 'bookings',    screen: 'bookings',    icon: '📅',  label: 'Jobs' },
+  { id: 'collections', screen: 'collections', icon: '⚖️',  label: 'Collect' },
   { id: 'dashboard',   screen: 'dashboard',   icon: '📊',  label: 'Reports' },
   { id: 'chat',        screen: null,          icon: '💬',  label: 'Chat' },
 ];
@@ -36,7 +36,7 @@ export default function MobileNav({ currentScreen, currentTab, alertCount, onNav
           <button key={item.id} onClick={handleTap} style={{
             background: 'none', border: 'none', cursor: 'pointer',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-            padding: '6px 12px', position: 'relative',
+            padding: '4px 0', flex: 1, position: 'relative',
             color: isActive ? B.yellow : '#888',
           }}>
             <div style={{ fontSize: 20, position: 'relative' }}>

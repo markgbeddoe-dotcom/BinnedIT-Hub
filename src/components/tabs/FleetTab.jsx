@@ -49,19 +49,15 @@ export default function FleetTab({ data, selectedMonth, monthCount, monthLabel }
       )}
 
       <ChartCard title={`Top Earning Bin Types (${monthLabel})`}>
-        <div style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: 320 }}>
-            <ResponsiveContainer width="100%" height={isMobile ? 220 : 300}>
-              <BarChart data={chartData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" />
-                <XAxis type="number" tick={{ fill: B.textMuted, fontSize: 10 }} tickFormatter={v => fmt(v)} />
-                <YAxis type="category" dataKey="name" tick={{ fill: B.textSecondary, fontSize: 11 }} width={100} />
-                <Tooltip content={<CustomTooltip formatter={v => fmtFull(v)} />} />
-                <Bar dataKey="income" fill={B.yellow} name="Income" radius={[0, 3, 3, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        <ResponsiveContainer width="99%" height={isMobile ? 220 : 300}>
+          <BarChart data={chartData} layout="vertical" margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#E0E0E0" />
+            <XAxis type="number" tick={{ fill: B.textMuted, fontSize: 10 }} tickFormatter={v => fmt(v)} />
+            <YAxis type="category" dataKey="name" tick={{ fill: B.textSecondary, fontSize: 11 }} width={110} />
+            <Tooltip content={<CustomTooltip formatter={v => fmtFull(v)} />} />
+            <Bar dataKey="income" fill={B.yellow} name="Income" barSize={16} radius={[0, 4, 4, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
       </ChartCard>
 
       {/* Summary table */}

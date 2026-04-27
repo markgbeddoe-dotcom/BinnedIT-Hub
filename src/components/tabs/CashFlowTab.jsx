@@ -13,9 +13,11 @@ export default function CashFlowTab({ reportId, reportMonth, selectedMonth, mont
   const { data: financials } = useFinancials(reportMonth);
   const { data: ytdRows } = useYTDFinancials(reportMonth);
 
-  // Build cash chart data — prefer Supabase YTD rows
+  // Build cash chart data — prefer Supabase YTD rows only when cash_income is populated
+  // (xero-sync doesn't write cash flow columns — fall back to hardcoded when all zero)
+  const hasCashData = ytdRows && ytdRows.length > 0 && ytdRows.some(r => (r.cash_income || 0) > 0);
   let cashData;
-  if (ytdRows && ytdRows.length > 0) {
+  if (hasCashData) {
     let runningBalance = 0;
     cashData = ytdRows.map(r => {
       const d = new Date(r.report_month);
@@ -42,7 +44,7 @@ export default function CashFlowTab({ reportId, reportMonth, selectedMonth, mont
 
   // KPI values — prefer live data
   const curCashBalance = financials?.cash_balance ?? (D.cashBalance[monthCount - 1] !== undefined ? D.cashBalance[monthCount - 1] : 99334);
-  const ytdCashNet = ytdRows && ytdRows.length > 0
+  const ytdCashNet = hasCashData
     ? ytdRows.reduce((a, r) => a + (r.cash_net_movement || ((r.cash_income || 0) - (r.cash_expenses || 0))), 0)
     : D.cashNetMovement.slice(0, monthCount).reduce((a, b) => a + b, 0);
 

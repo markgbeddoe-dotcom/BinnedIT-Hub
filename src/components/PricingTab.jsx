@@ -235,7 +235,7 @@ export default function PricingTab({ monthIndex = 7, monthLabel = 'Feb 2026' }) 
   return (
     <div>
       <div style={{ marginBottom: 18 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 800, color: B.textPrimary, margin: 0, fontFamily: fontHead, textTransform: 'uppercase' }}>Benchmarking & Pricing Analysis</h2>
+        <h2 style={{ fontSize: 20, fontWeight: 800, color: B.textPrimary, margin: 0, fontFamily: fontHead, textTransform: 'uppercase' }}>Per-Job Pricing & Profitability</h2>
         <p style={{ fontSize: 13, color: B.textSecondary, margin: '4px 0 0' }}>{monthLabel} performance by bin type — click column headers to sort — all figures ex GST</p>
       </div>
 

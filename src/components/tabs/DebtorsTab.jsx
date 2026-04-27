@@ -12,7 +12,7 @@ export default function DebtorsTab({ reportId, reportMonth, selectedMonth, month
 
   // Build AR data from Supabase or fallback to D.*
   let arChartData, topDebtorsData, arTotal, arOverdue, arCurrent, arOlder;
-  if (debtorRows && debtorRows.length > 0) {
+  if (debtorRows && debtorRows.length > 0 && debtorRows.some(r => (r.total_outstanding || 0) > 0)) {
     // Aggregate from Supabase debtor rows
     arCurrent = debtorRows.reduce((a, r) => a + (r.current_amount || 0), 0);
     const ar30 = debtorRows.reduce((a, r) => a + (r.overdue_30 || 0), 0);
@@ -66,32 +66,28 @@ export default function DebtorsTab({ reportId, reportMonth, selectedMonth, month
 
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
         <ChartCard title="AR Aging Breakdown">
-          <div style={{ overflowX: 'auto' }}>
-            <div style={{ minWidth: 300 }}>
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie
-                    data={arChartData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={90}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    labelLine={false}
-                  >
-                    {arColors.map((c, i) => <Cell key={i} fill={c} />)}
-                  </Pie>
-                  <Tooltip formatter={v => fmtFull(v)} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <ResponsiveContainer width="99%" height={250}>
+            <PieChart>
+              <Pie
+                data={arChartData}
+                cx="50%"
+                cy="50%"
+                outerRadius={90}
+                dataKey="value"
+                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                labelLine={false}
+              >
+                {arColors.map((c, i) => <Cell key={i} fill={c} />)}
+              </Pie>
+              <Tooltip formatter={v => fmtFull(v)} />
+            </PieChart>
+          </ResponsiveContainer>
         </ChartCard>
 
         <ChartCard title="Top 10 Debtors (by aging)">
           <div style={{ overflowX: 'auto' }}>
             <div style={{ minWidth: 320 }}>
-              <ResponsiveContainer width="100%" height={Math.max(250, topDebtorsData.length * 35)}>
+              <ResponsiveContainer width="99%" height={Math.max(250, topDebtorsData.length * 35)}>
                 <BarChart data={topDebtorsData} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E0E0E0" horizontal={false} />
                   <XAxis type="number" tick={{ fill: B.textMuted, fontSize: 10 }} tickFormatter={v => '$' + Math.round(v / 1000) + 'k'} />

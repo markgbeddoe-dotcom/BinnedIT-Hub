@@ -214,7 +214,7 @@ export default function CollectionsPage() {
   }, [overdueInvoices, filterLevel, isError])
 
   const stats = useMemo(() => {
-    const raw = (overdueInvoices && !isError) ? overdueInvoices : FALLBACK_OVERDUE
+    const raw = (overdueInvoices && overdueInvoices.length > 0 && !isError) ? overdueInvoices : FALLBACK_OVERDUE
     return {
       total: raw.length,
       totalAmount: raw.reduce((s,i)=>s+parseFloat(i.total||0),0),
