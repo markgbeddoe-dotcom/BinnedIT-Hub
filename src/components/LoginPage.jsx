@@ -1,5 +1,14 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabase'
+import { B, fontHead, fontBody } from '../theme'
+
+// Sprint 11A polish (audit-ux.md §2.2):
+//   - drop hardcoded `you@binnedit.com.au` placeholder (white-label leak)
+//   - add Forgot Password link
+//   - add "I'm a driver" deep-link to /driver
+//   - drop the local `brand` palette in favour of theme.js tokens
+//   - footer no longer leaks single tenant name to non-Binned-IT installs
 
 export default function LoginPage() {
   const { signIn } = useAuth()
@@ -7,16 +16,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
-
-  const brand = {
-    black: '#000006',
-    yellow: '#EFDF0F',
-    white: '#FFFFFF',
-    gray: '#F2F6F4',
-    border: '#D8DDD9',
-    text: '#000006',
-    muted: '#6B7280',
-  }
+  const [resetSent, setResetSent] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -27,13 +27,26 @@ export default function LoginPage() {
     setLoading(false)
   }
 
+  async function handleForgotPassword() {
+    if (!email) {
+      setError('Enter your email above first, then click Forgot password.')
+      return
+    }
+    setError(null)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    if (error) setError(error.message)
+    else setResetSent(true)
+  }
+
   return (
     <div style={{
-      minHeight: '100vh', background: brand.black, display: 'flex',
-      alignItems: 'center', justifyContent: 'center', fontFamily: '"DM Sans", sans-serif',
+      minHeight: '100vh', background: B.black, display: 'flex',
+      alignItems: 'center', justifyContent: 'center', fontFamily: fontBody, padding: 16,
     }}>
       <div style={{
-        background: brand.white, borderRadius: 12, padding: '48px 40px',
+        background: B.white, borderRadius: 12, padding: '48px 40px',
         width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
       }}>
         {/* Logo area */}
@@ -44,17 +57,17 @@ export default function LoginPage() {
             style={{ height: 56, objectFit: 'contain', marginBottom: 16 }}
             onError={e => { e.target.style.display = 'none' }}
           />
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'Oswald, sans-serif', color: brand.text }}>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: fontHead, color: B.textPrimary }}>
             SkipSync
           </div>
-          <div style={{ fontSize: 13, color: brand.muted, marginTop: 4 }}>
+          <div style={{ fontSize: 13, color: B.textMuted, marginTop: 4 }}>
             Operations Intelligence Platform
           </div>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: brand.text, marginBottom: 6 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: B.textPrimary, marginBottom: 6 }}>
               Email
             </label>
             <input
@@ -62,17 +75,18 @@ export default function LoginPage() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
-              placeholder="you@binnedit.com.au"
+              autoComplete="email"
+              placeholder="name@example.com"
               style={{
-                width: '100%', padding: '10px 14px', border: `1px solid ${brand.border}`,
+                width: '100%', padding: '10px 14px', border: `1px solid ${B.cardBorder}`,
                 borderRadius: 8, fontSize: 14, boxSizing: 'border-box',
                 outline: 'none', fontFamily: 'inherit',
               }}
             />
           </div>
 
-          <div style={{ marginBottom: 24 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: brand.text, marginBottom: 6 }}>
+          <div style={{ marginBottom: 8 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: B.textPrimary, marginBottom: 6 }}>
               Password
             </label>
             <input
@@ -80,14 +94,38 @@ export default function LoginPage() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
+              autoComplete="current-password"
               placeholder="••••••••"
               style={{
-                width: '100%', padding: '10px 14px', border: `1px solid ${brand.border}`,
+                width: '100%', padding: '10px 14px', border: `1px solid ${B.cardBorder}`,
                 borderRadius: 8, fontSize: 14, boxSizing: 'border-box',
                 outline: 'none', fontFamily: 'inherit',
               }}
             />
           </div>
+
+          {/* Forgot password */}
+          <div style={{ textAlign: 'right', marginBottom: 16 }}>
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              style={{
+                background: 'none', border: 'none', color: B.blue, fontSize: 12,
+                cursor: 'pointer', padding: 0, textDecoration: 'underline', fontFamily: 'inherit',
+              }}
+            >
+              Forgot password?
+            </button>
+          </div>
+
+          {resetSent && (
+            <div style={{
+              background: '#E6F7E6', border: '1px solid #A0E0A0', borderRadius: 8,
+              padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#1E5E1E',
+            }}>
+              Password reset email sent. Check your inbox.
+            </div>
+          )}
 
           {error && (
             <div style={{
@@ -102,10 +140,10 @@ export default function LoginPage() {
             type="submit"
             disabled={loading}
             style={{
-              width: '100%', padding: '12px', background: loading ? '#ccc' : brand.black,
-              color: brand.white, border: 'none', borderRadius: 8, fontSize: 15,
+              width: '100%', padding: '12px', background: loading ? '#ccc' : B.black,
+              color: B.white, border: 'none', borderRadius: 8, fontSize: 15,
               fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
-              fontFamily: 'Oswald, sans-serif', letterSpacing: '0.5px',
+              fontFamily: fontHead, letterSpacing: '0.5px',
               transition: 'background 0.2s',
             }}
           >
@@ -113,8 +151,19 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: 24, fontSize: 12, color: brand.muted }}>
-          SkipSync · Binned-IT Pty Ltd — Seaford, Melbourne
+        {/* Driver portal entry */}
+        <div style={{
+          marginTop: 24, paddingTop: 20, borderTop: `1px solid ${B.cardBorder}`,
+          textAlign: 'center', fontSize: 13, color: B.textSecondary,
+        }}>
+          Are you a driver? <a
+            href="/driver"
+            style={{ color: B.blue, fontWeight: 600, textDecoration: 'none' }}
+          >Open the Driver app →</a>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 11, color: B.textMuted }}>
+          SkipSync · Operations Intelligence Platform
         </div>
       </div>
     </div>

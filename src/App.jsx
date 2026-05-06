@@ -70,11 +70,23 @@ const tiles = [
   { id:"settings", icon:"⚙️", title:"Settings", desc:"Alert rules, competitors, thresholds", sub:"Configure platform", color:B.textMuted },
 ];
 
+// Plain-English dashboard tab labels (Sprint 11 #22 — closes the kid-test failures
+// surfaced in docs/audits/2026-05-06/audit-ux.md). The id values are unchanged so
+// every existing route, hook, and switch statement still works — only the visible
+// label changes.
 const dashTabs = [
-  {id:"snapshot",label:"SNAPSHOT"},{id:"revenue",label:"REVENUE"},{id:"margins",label:"MARGINS"},
-  {id:"benchmarking",label:"BENCHMARKING"},{id:"competitors",label:"COMPETITORS"},{id:"pricing",label:"PRICING"},
-  {id:"bdm",label:"BDM"},{id:"fleet",label:"FLEET"},{id:"debtors",label:"DEBTORS"},
-  {id:"cashflow",label:"CASH FLOW"},{id:"risk",label:"RISK / EPA"},{id:"workplan",label:"WORK PLAN"},
+  {id:"snapshot",label:"Overview"},
+  {id:"revenue",label:"Sales"},
+  {id:"margins",label:"Profit"},
+  {id:"benchmarking",label:"Compare"},
+  {id:"competitors",label:"Competitors"},
+  {id:"pricing",label:"Prices"},
+  {id:"bdm",label:"New Customers"},
+  {id:"fleet",label:"Trucks & Bins"},
+  {id:"debtors",label:"Who Owes Us"},
+  {id:"cashflow",label:"Cash"},
+  {id:"risk",label:"Compliance"},
+  {id:"workplan",label:"Action List"},
 ];
 
 // Operations-first nav order
@@ -390,13 +402,15 @@ export default function App() {
           <div style={{fontSize:13,color:'#555'}}>Period: Jul 2025 – {selLabel} | Generated: {new Date().toLocaleDateString('en-AU')}</div>
         </div>
 
-        {/* Tab Bar — hidden on mobile (use MobileNav instead) */}
+        {/* Tab Bar — hidden on mobile (use MobileNav instead).
+            Sprint 11 #22: dropped uppercase styling so the new plain-English labels
+            (Overview, Sales, Profit, ...) read naturally. */}
         <div style={{display:isMobile?'none':'flex',gap:2,overflowX:'auto',marginBottom:20,paddingBottom:2}} className="no-print">
           {dashTabs.map(t=>(
             <button key={t.id} onClick={()=>handleTabChange(t.id)} style={{
               background:dashTab===t.id?B.yellow:'transparent',color:dashTab===t.id?'#0A0A0A':B.textMuted,
               border:'none',padding:'8px 14px',borderRadius:'8px 8px 0 0',cursor:'pointer',
-              fontFamily:fontHead,fontSize:11,fontWeight:dashTab===t.id?700:500,letterSpacing:'0.06em',
+              fontFamily:fontHead,fontSize:13,fontWeight:dashTab===t.id?700:500,
               whiteSpace:'nowrap',transition:'all 0.15s',borderBottom:dashTab===t.id?`2px solid ${B.yellow}`:'2px solid transparent'
             }}>{t.label}</button>
           ))}

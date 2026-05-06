@@ -1,13 +1,17 @@
 import React from 'react';
 import { B, fontHead } from '../theme';
 
+// Sprint 11A: replaced opaque "Collect" (⚖️) with "Load Data" (📥) so Sarah can
+// reach the wizard from any mobile page. Collections is still reachable from the
+// hamburger side menu. Audit-ux.md §1 ranked the scales-of-justice icon as the
+// 7th-worst kid-test confusion point.
 const NAV_ITEMS = [
-  { id: 'home',        screen: 'home',        icon: '🏠',  label: 'Home' },
-  { id: 'dispatch',    screen: 'dispatch',    icon: '🗂️',  label: 'Dispatch' },
-  { id: 'bookings',    screen: 'bookings',    icon: '📅',  label: 'Jobs' },
-  { id: 'collections', screen: 'collections', icon: '⚖️',  label: 'Collect' },
-  { id: 'dashboard',   screen: 'dashboard',   icon: '📊',  label: 'Reports' },
-  { id: 'chat',        screen: null,          icon: '💬',  label: 'Chat' },
+  { id: 'home',         screen: 'home',         icon: '🏠', label: 'Home' },
+  { id: 'dispatch',     screen: 'dispatch',     icon: '🗂️', label: 'Dispatch' },
+  { id: 'bookings',     screen: 'bookings',     icon: '📅', label: 'Jobs' },
+  { id: 'month-select', screen: 'month-select', icon: '📥', label: 'Load Data' },
+  { id: 'dashboard',    screen: 'dashboard',    icon: '📊', label: 'Reports' },
+  { id: 'chat',         screen: null,           icon: '💬', label: 'Chat' },
 ];
 
 export default function MobileNav({ currentScreen, currentTab, alertCount, onNavigate, onChatOpen, chatOpen }) {
