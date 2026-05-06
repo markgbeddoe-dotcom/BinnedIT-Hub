@@ -38,6 +38,7 @@ Claude Code has `SUPABASE_SERVICE_ROLE_KEY` (PostgREST scope only) but not the d
 | `017_postal_letter_queue.sql` | New `postal_letter_queue` table for the Sprint 13 #10 collections postal-letter dispatch endpoint. |
 | `018_per_bin_cost_detail.sql` | Adds 10 per-bin cost columns to `bin_type_performance` to back the Sprint 14 #15 derived loss-maker detection. |
 | `019_opex_wages_super_split.sql` | Adds `opex_wages` + `opex_super` columns to `financials_monthly` (Sprint 15 #26). `opex_admin` retained as the legacy aggregate. |
+| **`020_accounting_basis.sql` (NEW Sprint 17)** | **CRITICAL — fixes the cash-vs-accrual gap.** Adds `accounting_basis text NOT NULL DEFAULT 'cash' CHECK (cash|accrual)` to financials_monthly + balance_sheet_monthly + debtors_monthly. Replaces the natural key with `(report_id, report_month, accounting_basis)` so both bases coexist. Backfills every existing row to `'accrual'` since the Sprint 10 sync never sent `paymentsOnly`. After this Mark sees CASH by default; Sarah can toggle to ACCRUAL when reconciling against Xero's accrual report. |
 
 **If anything fails:** every migration uses `IF NOT EXISTS` / `IF EXISTS` / `CREATE OR REPLACE` so partial application is safe to re-run. The 017 CHECK constraint is wrapped in a DO block that drops it first if it exists.
 
@@ -82,17 +83,21 @@ Sprint 11 #11 + Sprint 13 #10 wired the legal-letter ABN/BSB to read from `platf
 
 ---
 
-## 🔵 Need YOUR action — verify the Xero data integrity rewrite
+## 🔵 Need YOUR action — verify the Xero data integrity rewrite + cash basis
 
-After applying migration 017–019 (above), trigger a fresh Xero sync for a recent month and run Meg's reconciliation cycle (per `agents/Accountant.md` §10 "2026-05-07 Sprints 12–16" entry). Specifically check:
+After applying migrations 017–020 (above), trigger fresh Xero syncs for a recent month and run Meg's reconciliation cycle. Specifically check:
 
-1. **Revenue mix** — `rev_other / rev_total < 1%` (was 64% before Sprint 10/14)
-2. **Cash balance** — matches Xero's bank balance to the cent (was $0 before Sprint 10)
-3. **Debtors count** — `SELECT COUNT(*) FROM debtors_monthly WHERE report_month = '<latest>';` > 0 (was 0 before Sprint 10)
-4. **Loss-makers** — BenchmarkingTab now flags loss-makers from derived metrics (Sprint 14 #15) instead of static `pricingData.np`
-5. **Opex split** — `opex_wages` and `opex_super` columns populated separately (Sprint 15 #26)
+1. **Cash basis Feb 2026 (the headline test)** — sync via `POST /api/xero-sync` with body `{ "action": "sync_all_bases", "month": "2026-02", "userId": "<your-uuid>" }`. Then in Settings → Reports tab, ensure the Cash/Accrual toggle defaults to **Cash**. Snapshot tab Net Profit should show **−$17,638.72** for Feb 2026 (a LOSS — was previously showing accrual's +$30,511.71 profit). Toggle to Accrual → number flips to +$30,511.71. The full per-month reconciliation Meg ran is at `docs/audits/2026-05-07-cash-vs-accrual-reconciliation.md`.
+2. **Revenue mix** — `rev_other / rev_total < 1%` (was 64% before Sprint 10/14)
+3. **Cash balance** — matches Xero's bank balance to the cent (was $0 before Sprint 10)
+4. **Debtors count** — `SELECT COUNT(*) FROM debtors_monthly WHERE report_month = '<latest>' AND accounting_basis = 'accrual';` > 0 (debtors only meaningful under accrual)
+5. **Loss-makers** — BenchmarkingTab now flags loss-makers from derived metrics (Sprint 14 #15) instead of static `pricingData.np`
+6. **Opex split** — `opex_wages` and `opex_super` columns populated separately (Sprint 15 #26)
+7. **Investor view RBAC + cash lock** — log in as a viewer/investor role; should be redirected to `/investor` AND the basis toggle should be disabled with the tooltip "Investor view is fixed to cash basis per CFO recommendation"
 
-How to trigger sync: Settings → Xero → "Sync Current Month" button (existing flow from earlier work).
+How to trigger sync: Settings → Xero → "Sync Current Month" (which now should do both bases — verify with Settings → Xero Sync Log table) OR direct API call as above.
+
+The Playwright suite at `e2e/cash-accrual-toggle.spec.js` automates assertions 1 + 7. Run with `npm run test:e2e -- e2e/cash-accrual-toggle.spec.js` once the migration + Vercel deploy land.
 
 ---
 
