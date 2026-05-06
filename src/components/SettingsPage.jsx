@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { B, fontHead, fontBody } from '../theme';
@@ -7,12 +7,144 @@ import { SectionHeader } from './UIComponents';
 import { getAlertThresholds, upsertThreshold, getProfiles, updateProfileRole, getBinTypes, upsertBinType, inviteUser } from '../api/settings';
 import { getXeroStatus, syncXeroMonth, syncXeroAllHistory, getXeroSyncLog } from '../api/xero';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 
 const iStyle = {
   background: B.bg, border: `1px solid ${B.cardBorder}`, borderRadius: 6,
   padding: '6px 10px', fontSize: 13, color: B.textPrimary, outline: 'none',
   fontFamily: fontBody,
 };
+
+// ─── Company Identity editor (Sprint 11 #11 follow-up) ───────────────────────
+// Lets the owner save real ABN/ACN/BSB/etc into platform_settings under
+// company.* keys. The legal-letter templates and the CollectionsPage Send-gate
+// read these via useCompanyConfig(). When values are saved, hasPlaceholders
+// flips to false and Sarah can dispatch letters.
+
+const COMPANY_FIELDS = [
+  { key: 'company.name',    label: 'Company name',         placeholder: 'Binned-IT Pty Ltd' },
+  { key: 'company.abn',     label: 'ABN',                  placeholder: '11 222 333 444' },
+  { key: 'company.acn',     label: 'ACN',                  placeholder: '123 456 789' },
+  { key: 'company.address', label: 'Registered address',   placeholder: '12 Industrial Way, Seaford VIC 3198' },
+  { key: 'company.phone',   label: 'Accounts phone',       placeholder: '03 9123 4567' },
+  { key: 'company.email',   label: 'Accounts email',       placeholder: 'accounts@example.com.au' },
+  { key: 'company.bsb',     label: 'BSB',                  placeholder: '063-000' },
+  { key: 'company.account_number',         label: 'Bank account number',     placeholder: '1234 5678' },
+  { key: 'company.penalty_interest_rate',  label: 'Penalty interest rate %', placeholder: '10' },
+];
+
+function CompanyIdentityEditor() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const { data: rows = [], isLoading } = useQuery({
+    queryKey: ['platform-settings-company'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('platform_settings')
+        .select('key, value')
+        .in('key', COMPANY_FIELDS.map(f => f.key));
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const initial = useMemo(() => {
+    const map = Object.fromEntries(rows.map(r => [r.key, r.value || '']));
+    return Object.fromEntries(COMPANY_FIELDS.map(f => [f.key, map[f.key] || '']));
+  }, [rows]);
+
+  const [form, setForm] = useState(initial);
+  const [savedAt, setSavedAt] = useState(null);
+  const [saveError, setSaveError] = useState(null);
+
+  // Reset local form whenever the loaded rows change (e.g. on first fetch).
+  useEffect(() => { setForm(initial); }, [initial]);
+
+  const dirty = COMPANY_FIELDS.some(f => (form[f.key] || '') !== (initial[f.key] || ''));
+
+  const handleSave = async () => {
+    setSaveError(null);
+    const upserts = COMPANY_FIELDS
+      .filter(f => (form[f.key] || '').trim() !== (initial[f.key] || '').trim())
+      .map(f => ({
+        key: f.key,
+        value: (form[f.key] || '').trim(),
+        updated_by: user?.id || null,
+        updated_at: new Date().toISOString(),
+      }));
+    if (upserts.length === 0) return;
+    const { error } = await supabase.from('platform_settings').upsert(upserts, { onConflict: 'key' });
+    if (error) { setSaveError(error.message); return; }
+    setSavedAt(new Date().toISOString());
+    qc.invalidateQueries({ queryKey: ['platform-settings-company'] });
+    qc.invalidateQueries({ queryKey: ['company-config'] }); // useCompanyConfig hook key
+  };
+
+  const PLACEHOLDER_ABN = '57 123 456 789';
+  const placeholderActive =
+    !form['company.abn'] || form['company.abn'].trim() === '' || form['company.abn'].trim() === PLACEHOLDER_ABN ||
+    !form['company.bsb'] || form['company.bsb'].trim() === '' || form['company.bsb'].trim() === '063-000' ||
+    !form['company.account_number'] || form['company.account_number'].trim() === '' || form['company.account_number'].trim() === '1234 5678';
+
+  return (
+    <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+        <span style={{ fontSize: 20 }}>🏢</span>
+        <div style={{ fontFamily: fontHead, fontSize: 14, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase' }}>Company Identity</div>
+      </div>
+      <p style={{ fontSize: 13, color: B.textMuted, marginBottom: 16, lineHeight: 1.6 }}>
+        Used by every legal letter the platform generates (account contracts, director guarantees,
+        collections demands, security-over-assets notices). <strong>Until you set real values here,
+        the Send button on the Collections page is disabled</strong> because letters with placeholder
+        ABN/BSB are legally defective.
+      </p>
+
+      {placeholderActive && (
+        <div style={{ background: '#FFF4E6', border: `1px solid ${B.amber}`, borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: '#7A4F00' }}>
+          ⚠ At least one of ABN / BSB / account number is missing or still a placeholder.
+          Letters cannot be dispatched until all three are configured with real values.
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        {COMPANY_FIELDS.map(f => (
+          <div key={f.key} style={{ gridColumn: f.key === 'company.address' ? '1 / -1' : 'auto' }}>
+            <label style={{ display: 'block', fontSize: 11, color: B.textMuted, fontFamily: fontHead, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+              {f.label}
+            </label>
+            <input
+              type="text"
+              value={form[f.key] || ''}
+              onChange={e => setForm({ ...form, [f.key]: e.target.value })}
+              placeholder={f.placeholder}
+              disabled={isLoading}
+              style={{ ...iStyle, width: '100%', boxSizing: 'border-box' }}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
+        <button
+          onClick={handleSave}
+          disabled={!dirty || isLoading}
+          style={{
+            background: dirty ? B.yellow : B.cardBgHover,
+            color: dirty ? B.black : B.textMuted,
+            border: 'none', borderRadius: 6, padding: '8px 20px',
+            fontFamily: fontHead, fontSize: 12, fontWeight: 700,
+            textTransform: 'uppercase', cursor: dirty ? 'pointer' : 'not-allowed',
+            transition: 'background 0.2s, color 0.2s',
+          }}
+        >
+          Save Company Identity
+        </button>
+        {savedAt && !dirty && <span style={{ fontSize: 12, color: B.green }}>✓ Saved</span>}
+        {saveError && <span style={{ fontSize: 12, color: B.red }}>{saveError}</span>}
+      </div>
+    </div>
+  );
+}
 
 // ─── White-Label Widget section ───────────────────────────────────────────────
 const EMBED_TENANTS = [
@@ -691,6 +823,9 @@ export default function SettingsPage() {
           )}
         </div>
       )}
+
+      {/* Company Identity (legal-letter ABN/BSB/etc — Sprint 11 #11 follow-up) */}
+      {isOwner && <CompanyIdentityEditor />}
 
       {/* White-Label Booking Widget */}
       {isOwner && <WhiteLabelWidget />}
