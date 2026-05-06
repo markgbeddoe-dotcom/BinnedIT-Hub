@@ -4,6 +4,7 @@ import { useBreakpoint } from '../hooks/useBreakpoint'
 import { useCollectionsSummary, useOverdueInvoices, useCreateCollectionsEvent, useEscalateInvoice } from '../hooks/useCollections'
 import { generateCollectionsLetter, generateSecurityOverAssetsLetter } from '../lib/legalTemplates'
 import { useCompanyConfig } from '../hooks/useCompanyConfig'
+import { supabase } from '../lib/supabase'
 
 // ── Fallback overdue invoices when Supabase unavailable ───────────────────────
 const FALLBACK_OVERDUE = [
@@ -38,6 +39,7 @@ function LevelBadge({ level }) {
 // ── Letter Preview Modal ──────────────────────────────────────────────────────
 function LetterModal({ invoice, level, customer, onClose, onSend }) {
   const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState(null)
   const [method, setMethod] = useState('email')
   const { company, hasPlaceholders } = useCompanyConfig()
   const letter = useMemo(
@@ -47,7 +49,14 @@ function LetterModal({ invoice, level, customer, onClose, onSend }) {
 
   const handleSend = async () => {
     setSending(true)
-    try { await onSend(letter, method) } finally { setSending(false) }
+    setSendError(null)
+    try {
+      await onSend(letter, method)
+    } catch (err) {
+      setSendError(err?.message || 'Send failed — please try again.')
+    } finally {
+      setSending(false)
+    }
   }
 
   const levelCfg = LEVEL_CFG[level] || LEVEL_CFG[1]
@@ -92,9 +101,14 @@ function LetterModal({ invoice, level, customer, onClose, onSend }) {
               <option value="email_post">Email + Registered Post</option>
             </select>
             {method !== 'manual' && (
-              <div style={{ fontSize:10, color:B.amber, marginTop:4 }}>
-                ⚠ Send actually only RECORDS the event — outbound dispatch (email/post) is not yet wired.
-                Use 'Mark as sent (manual)' if you've already sent the letter via your usual channel.
+              <div style={{ fontSize:10, color:B.textSecondary, marginTop:4 }}>
+                ✓ Real send is now wired (email via Resend{method === 'post' || method === 'email_post' ? '; registered post is queued for manual dispatch' : ''}).
+                Confirm the recipient ({customer?.email || invoice?.customer_email || 'no email on file'}) is correct before clicking send.
+              </div>
+            )}
+            {sendError && (
+              <div style={{ fontSize:11, color:B.red, marginTop:6, fontWeight:600 }}>
+                ⚠ {sendError}
               </div>
             )}
           </div>
@@ -111,7 +125,11 @@ function LetterModal({ invoice, level, customer, onClose, onSend }) {
               opacity:sending?0.7:1,
             }}
           >
-            {hasPlaceholders ? '⚠ Config required' : sending ? 'Recording…' : `✓ Record — Level ${level}`}
+            {hasPlaceholders
+              ? '⚠ Config required'
+              : sending
+                ? (method === 'manual' ? 'Recording…' : 'Sending…')
+                : (method === 'manual' ? `✓ Record — Level ${level}` : `✉ Send — Level ${level}`)}
           </button>
         </div>
       </div>
@@ -270,6 +288,57 @@ export default function CollectionsPage() {
   }
 
   const handleSendLetter = async (letterBody, deliveryMethod) => {
+    // Sprint 13 #13A: actually send via Resend (and stub postal) when the
+    // bookkeeper picks anything other than "manual". Manual still just records
+    // the event for accounts where Sarah has already mailed via her own
+    // channel. We POST to /api/collections-send BEFORE writing the
+    // collections_events row — if the send fails (5xx, no key, etc.) the user
+    // sees the error and we DO NOT record a "ghost sent" row.
+    if (deliveryMethod !== 'manual') {
+      const recipientEmail = modal.invoice?.customer_email
+        || modal.customer?.email
+        || modal.customer?.billing_email
+      const recipientName  = modal.customer?.name || modal.invoice?.customer_name
+
+      // Email-based methods need an address; postal-only doesn't.
+      if ((deliveryMethod === 'email' || deliveryMethod === 'email_post') && !recipientEmail) {
+        throw new Error('No email address on file for this customer — pick "Mark as sent (manual)" or add an email first.')
+      }
+
+      const sessionRes = await supabase.auth.getSession()
+      const token = sessionRes?.data?.session?.access_token
+      if (!token) {
+        throw new Error('Your session has expired — please reload the page and sign in again.')
+      }
+
+      let res
+      try {
+        res = await fetch('/api/collections-send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            invoiceId: modal.invoice.id,
+            level: modal.level,
+            deliveryMethod,
+            letterText: letterBody,
+            to: { email: recipientEmail, name: recipientName },
+            cc: [],
+          }),
+        })
+      } catch (netErr) {
+        throw new Error(`Network error contacting send service: ${netErr?.message || 'unknown'}`)
+      }
+
+      let payload = {}
+      try { payload = await res.json() } catch { /* non-JSON */ }
+      if (!res.ok) {
+        throw new Error(payload?.error || `Send failed (HTTP ${res.status})`)
+      }
+    }
+
     await createEvent.mutateAsync({
       invoice_id: modal.invoice.id?.startsWith('f') ? null : modal.invoice.id,
       customer_id: modal.customer?.id?.startsWith('f') ? null : modal.customer?.id,
