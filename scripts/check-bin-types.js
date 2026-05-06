@@ -1,6 +1,9 @@
-#!/usr/bin/env node
 /**
  * scripts/check-bin-types.js
+ *
+ * Run with: `node scripts/check-bin-types.js`
+ * (Shebang removed because Vite/Rolldown can't parse it when this file is
+ * imported by the Vitest suite under jsdom.)
  *
  * Operator pre-check helper for Sprint 14 #14A migration.
  *
@@ -27,7 +30,6 @@
  * unmapped (operator action required).
  */
 
-import { pathToFileURL } from 'node:url'
 import { normalizeBinType, CANONICAL_BIN_TYPES } from '../src/lib/binTypes.js'
 
 // Hardcoded fixture: every Bin Manager / Xero SKU pulled from
@@ -134,10 +136,11 @@ async function main() {
 }
 
 // Only run main when invoked directly (not when imported by the test).
-// pathToFileURL handles Windows backslashes + spaces in the path correctly.
-const isDirectRun = process.argv[1]
-  ? import.meta.url === pathToFileURL(process.argv[1]).href
-  : false
+// Heuristic: argv[1] ends with this filename. Avoids `import 'node:url'`
+// which Vite/Rolldown can't resolve when bundling tests for jsdom.
+const isDirectRun = typeof process !== 'undefined' &&
+  process.argv?.[1] &&
+  /[\\/]check-bin-types\.js$/.test(process.argv[1])
 if (isDirectRun) {
   main().catch(err => {
     process.stderr.write(`Fatal: ${err.message}\n`)
