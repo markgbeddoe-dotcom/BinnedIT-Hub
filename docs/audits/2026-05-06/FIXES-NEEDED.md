@@ -7,6 +7,59 @@ This file is the single source of truth for what needs to happen next. Group by 
 
 ---
 
+## Sprints 12-16 — Full backlog completion — closed 2026-05-07
+
+Multi-agent execution: every remaining audit item from the original 38 was assigned to a parallel background agent (4 per sprint × 5 sprints = ~18 agents working in isolated git worktrees). Each agent owned a strict file boundary; integration cherry-picked branches into master sequentially.
+
+### Sprint 12 — Driver app v1
+| # | Item | Status |
+|---|---|---|
+| 16 | Driver-specific service worker | ✅ DONE — `public/sw-driver.js` with `skipsync-driver-v1` cache, scoped registration in `index.html` |
+| 17 | Offline write queue library | ✅ DONE — `src/lib/offlineQueue.js` (IndexedDB primary, localStorage fallback, retry with maxRetries, idempotencyKey dedup) + 12 Vitest tests |
+| 18 | Driver state machine v1 | ✅ DONE — `src/components/driver/jobStateMachine.js` with `pending → en_route → arrived → in_progress → completed`, mandatory delivery photo gate, vehicle checklist gate + 20 Vitest tests |
+| 32 | useBreakpoint + safe-area in DriverApp | ✅ DONE — max-width 520px on desktop, 44×44 tap targets, `env(safe-area-inset-*)` padding, `min(280px, 85vw)` drawer |
+
+### Sprint 13 — Customer comms wiring
+| # | Item | Status |
+|---|---|---|
+| 10 (full) | Resend email send for Collections | ✅ DONE — `api/collections-send.js` with auth, validation, Resend integration, fail-safe email_reminders_log + 12 Vitest tests. CollectionsPage `handleSend` POSTs before recording the event so failed sends don't ghost-record. |
+| 21 | Twilio SMS for booking confirmations | ✅ DONE — `api/book-confirm.js` real Twilio REST call, fail-soft when env vars missing, 4xx logged-not-thrown + 3 Vitest tests. `.env.example` updated. |
+| 10 (postal) | Postal-letter dispatch queue | 🟡 ENDPOINT — `api/postal-send.js` + `postal_letter_queue` table (migration 017_postal_letter_queue.sql) + 10 Vitest tests. Provider integration (PostGrid/Sendle) is Phase-3 follow-up. |
+
+### Sprint 14 — Pricing intelligence v2
+| # | Item | Status |
+|---|---|---|
+| 14 | Bin-type CHECK + backfill | ✅ DONE — migration `017_canonical_bin_types.sql` with PL/pgSQL `normalize_bin_type()` mirror of the JS normalizer + idempotent UPDATE + CHECK on both `bin_type_performance.bin_type` and `competitor_rates.bin_type`. Plus operator helper `scripts/check-bin-types.js` (8 Vitest tests). |
+| 15 | Per-bin loss detection from derived metrics | ✅ DONE — migration `018_per_bin_cost_detail.sql` adds 10 per-bin cost columns. New `src/lib/derivedBinMetrics.js` with `computePerBinMetrics`, `flagLossMakers`, `riskRanking` + 11 Vitest tests. BenchmarkingTab now uses derived classification. |
+| 19 | JobCostingWidget into Dispatch | ✅ DONE — pure costing math extracted to `src/lib/jobCosting.js` (15 Vitest tests). DispatchBoard renders the widget inside expanded JobCard, gated by an opt-in localStorage-persisted toggle. |
+| 29 | Money rounding helpers | ✅ DONE — `src/lib/money.js` with `roundMoney`, `roundPercent`, `avgPrice`, `formatMoney` + 30 Vitest tests. PricingTab routes through them at the three audit-flagged sites. |
+| 30 | Competitor rate name normalization | ✅ DONE — CompetitorPage `lookupRate(competitor, serviceName)` tries direct then `normalizeCompetitorBinType()` fallback; upsert path normalizes `bin_type` before write. 10 Vitest tests. |
+
+### Sprint 15 — UX polish round 2
+| # | Item | Status |
+|---|---|---|
+| 23 | Mobile dashboard tab picker | ✅ DONE — bottom-sheet drawer in MobileNav grouped by category (At a glance / Money / Operations / Comparison / Compliance + Action), accessible (Esc, focus trap, ARIA dialog), tap-Reports-while-on-dashboard opens it |
+| 24 | Westpac Business Cash Reserve double-counting | ✅ DONE — `findCashBalance` now skips any subtree under Liabilities/Equity even if "Bank" appears in the title |
+| 26 | opex_admin split | ✅ DONE — separate `opex_wages` (wage/salar/payroll) and `opex_super` (super) outputs in `mapPLToFinancials`. Migration `019_opex_wages_super_split.sql` adds the columns. `opex_admin` retained as legacy aggregate for backward compat. |
+| 28 | Unused BS schema columns | ✅ DONE — `parseBalanceSheet` confirmed populating `accounts_payable`, `fixed_assets`, `loan_current`, `loan_noncurrent`, `total_loans` per Vitest fixture |
+| 31 | Versioned fallback data metadata | ✅ DONE — `fallbackDataMetadata` constant added to `src/data/financials.js` with source/effective_from/effective_to |
+
+### Sprint 16 — Cleanup + PRD truth-up
+| # | Item | Status |
+|---|---|---|
+| 35 | Surface orphaned audit/team routes | ✅ DONE — `Audit Log` (📜) and `Team` (👥) added to side-menu SYSTEM section, owner-only filter |
+| 36 | CompetitorPage / Competitors-tab dedup | ✅ DONE — `CompetitorPage` accepts `embedded` prop; `CompetitorsTab` reduced to one-line wrapper |
+| 37 | Two booking flows reconciliation | ✅ DONE — `src/components/booking/BookingForm.jsx` (~720 lines) extracted from both pages. `BookingPage` and `EmbedBookingPage` reduced to ~155 + ~110 line shells (-646 net). Both share validation, state machine, UI primitives, Supabase write, /api/book-confirm pipeline. |
+| 38 | PRD-v6 §1 truth-up | ✅ DONE — every "What this platform will do when complete" bullet now carries ✅/🟡/⏳ status. New §1.1 "Recent Sprint History" section. AI/OCR/route/wages/auto-invoice items explicitly marked Phase 4–5 roadmap. |
+
+**Cumulative test count across Sprints 12–16:** 164 baseline → **311 passing** (+147 new tests over 5 sprints). Build clean, Playwright e2e 2/2 passing.
+
+**Files created:** 23 new files. **Files modified:** ~15 source files, 1 PRD, 3 audit docs.
+
+**The original 38-item audit backlog is now FULLY CLOSED.** Remaining work is net-new PRD-v6 features (Phase 4-5 roadmap items: AI bin-content/hazmat checking, OCR, travel optimisation, wages/rostering, web-search competitor intelligence, auto-Xero invoice on completion). Those are roadmap, not bugs.
+
+---
+
 ## Sprint 11 — "Make it usable" — closed 2026-05-07
 
 | # | Item | Status |

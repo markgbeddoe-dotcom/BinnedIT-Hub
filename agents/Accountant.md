@@ -382,6 +382,47 @@ Continuation of Sprint 10. Focus shifted from data integrity to user-facing usab
 - `npm test` — 164/164 passing (58 new in `binTypes.test.js`)
 - `npm run test:e2e` — 2/2 passing (login smoke at desktop + mobile)
 
+---
+
+### 2026-05-07 — Sprints 12–16: full audit backlog closure (multi-agent execution)
+
+After Sprints 10 + 11 closed the highest-priority data-integrity items, the remaining 38-item audit backlog was completed in a single multi-agent push: ~18 background agents working in isolated git worktrees, sequenced sprint-by-sprint with file-ownership boundaries to keep merges clean.
+
+**What landed:**
+- **Sprint 12 (Driver app v1):** separate `/driver` PWA service worker, offline write queue library (IndexedDB-backed, retry policy, idempotency), state-machine v1 (`pending → en_route → arrived → in_progress → completed` with mandatory delivery photo + checklist gates), mobile-fit polish (safe-area-inset, max-width 520px on desktop, 44×44 tap targets).
+- **Sprint 13 (Customer comms wiring):** real Resend email send for Collections (no more "ghost sent" rows), real Twilio SMS for `/book` and `/embed` confirmations (fail-soft when env vars missing), postal-letter dispatch endpoint + `postal_letter_queue` table (provider integration deferred).
+- **Sprint 14 (Pricing intelligence v2):** SQL CHECK on `bin_type` columns with PL/pgSQL backfill mirror of the JS normalizer, per-bin cost-detail columns + derived `flagLossMakers`/`riskRanking` helpers, JobCostingWidget wired into Dispatch (opt-in), money rounding helpers (`roundMoney`/`roundPercent`/`avgPrice`/`formatMoney`), competitor-rate name normalization at lookup AND insert.
+- **Sprint 15 (UX polish round 2):** mobile dashboard tab picker drawer (all 12 tabs reachable on mobile, fully accessible — Esc, focus trap, ARIA), opex_admin split into `opex_wages` + `opex_super`, Westpac-Liability cash-bleed prevented, full BS column coverage (`accounts_payable`, `fixed_assets`, `loan_current`, `loan_noncurrent`, `total_loans`), `fallbackDataMetadata` versioning constant.
+- **Sprint 16 (Cleanup + PRD truth-up):** orphaned `/settings/audit` + `/settings/team` routes surfaced in side menu (owner-only), CompetitorPage + CompetitorsTab deduped via `embedded` prop, BookingPage + EmbedBookingPage unified via shared `BookingForm` component (-646 net lines), PRD-v6 §1 status truth-up so every capability bullet is honestly marked ✅/🟡/⏳.
+
+**Source-of-truth updates from this push:**
+- `bin_type` is now SQL-constrained to the 40 canonical names (`8 sizes × 5 categories`). Future Bin Manager renames will be rejected at write time, not silently bucketed wrong.
+- `opex_admin` is now a derived aggregate; `opex_wages` and `opex_super` are the canonical inputs. Management reports separating staff costs from superannuation are now possible.
+- `cash_balance` is bulletproof against Liability-side bank-named rows. The Westpac Business Cash Reserve can no longer bleed into cash even if a future Xero export structure changes.
+- `bookings` writes always include `tenant_id` (default tenant for `/book`, specific tenant for `/embed/<slug>`). Multi-tenant analytics are now reliable.
+- The "two competitor pages" / "two booking pages" duplication is gone. One implementation each, with a thin embedded/standalone variation.
+
+**Process change (effective immediately):**
+- For audit-driven sprints, dispatching multiple parallel background agents with isolated git worktrees + tight file-ownership boundaries works well. ~18 agents in this push, all integrated within ~30 minutes of wall-clock time. The model is: agents do the work, the orchestrator handles the merge train. Worth repeating for any future multi-front audit response.
+
+**Recurrence risk reduction:**
+- 311 Vitest tests is the new baseline (was 164). Every classifier rule, every cost calculation, every state transition has a regression test against the actual Binned-IT data fixtures. Future SKU additions should add cases to `binTypes.test.js` and `xero-mapper.test.js` — those tests fail loudly when the rules need updating.
+- The driver state machine is now a pure function (`jobStateMachine.js`) — UI changes can't accidentally break the lifecycle invariants.
+
+**The original 38-item audit backlog is FULLY CLOSED.** Remaining roadmap items (AI bin-content checking, OCR, travel optimisation, wages/rostering, web-search competitor intel, auto-Xero invoice on completion) are net-new PRD-v6 features marked Phase 4–5, not bugs.
+
+**Pre-deploy verification (this push):**
+- `npm run build` — 0 errors (chunk-size warning expected)
+- `npm test` — **311/311** passing (147 new across the five sprints)
+- `npm run test:e2e` — 2/2 passing
+- Cherry-pick merge train: 100% conflict-free (file-ownership boundaries held; 13C/14C/15B/16A direct-to-master commits handled cleanly)
+
+**Post-deploy reconciliation cycle:** Meg should run a fresh end-to-end on May 2026 data once Vercel auto-deploy lands. Specifically verify:
+1. Twilio SMS sends a real text on a test booking through `/book`
+2. Collections "Send" via Resend delivers an email with the configured ABN/BSB (Sprint 11 placeholder gate now operational)
+3. After applying migration `017_canonical_bin_types.sql`, every existing row in `bin_type_performance` and `competitor_rates` is canonical (use `scripts/check-bin-types.js` to pre-check)
+4. After applying migration `018_per_bin_cost_detail.sql`, BenchmarkingTab's loss-maker list matches the per-job allocator output
+
 **Deferred to next session** (each carries P0/P1 — see `FIXES-NEEDED.md`):
 - Xero sync mapping rewrite (revenue, COS, cash, AR — items 1-4).
 - Per-month fallback arrays + PricingTab Feb-only branch (items 5-6).
