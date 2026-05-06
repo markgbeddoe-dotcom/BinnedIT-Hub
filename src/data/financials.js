@@ -1,5 +1,16 @@
 // ===== SKIPSYNC / BINNED-IT PTY LTD — FINANCIAL DATA FY2026 YTD (Jul 2025 – Feb 2026) =====
 
+// Sprint 15 #31 (audit P2): explicit versioning metadata for the hardcoded
+// fallback dataset. Live data comes from Supabase; this constant exists so
+// callers (e.g. the diagnostics view) can flag when fallback is in use and
+// surface the as-of date clearly in the UI.
+export const fallbackDataMetadata = {
+  source: 'Bin Manager + Xero P&L, Feb 2026',
+  effective_from: '2026-02-01',
+  effective_to: '2026-03-01',
+  notes: 'Hardcoded fallback only; live data comes from Supabase.',
+}
+
 export const months = ["Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb"];
 
 // GST adjustment: all Bin Manager and competitor prices are inc GST

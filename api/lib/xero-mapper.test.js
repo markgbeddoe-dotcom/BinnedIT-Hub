@@ -274,6 +274,81 @@ describe('mapPLToFinancials — rev_general is now populated (audit P0-1)', () =
   })
 })
 
+// ── mapPLToFinancials — opex_wages / opex_super split (Sprint 15 #26) ───────
+
+describe('mapPLToFinancials — splits opex_admin into opex_wages + opex_super (Sprint 15 #26)', () => {
+  it('Binned-IT Jul 2025: Wages ~$58k → opex_wages, Super ~$7.5k → opex_super', () => {
+    // Real Binned-IT staffing-overheads structure
+    const sections = {
+      'trading income': { _total: 0, _rows: [] },
+      'cost of sales': { _total: 0, _rows: [] },
+      'operating expenses': { _total: 0, _rows: [] },
+      'staffing overheads': {
+        _total: 66442.57,
+        _rows: [
+          { name: 'Wages and Salaries', amount: 58942.57 },
+          { name: 'Superannuation', amount: 7500.00 },
+        ],
+      },
+    }
+    const result = mapPLToFinancials(sections, '2025-07')
+    expect(result.opex_wages).toBeCloseTo(58942.57, 2)
+    expect(result.opex_super).toBeCloseTo(7500, 2)
+    // Legacy aggregate is preserved for backward compat
+    expect(result.opex_admin).toBeCloseTo(58942.57 + 7500, 2)
+  })
+
+  it('inline opex layout (no staffing-overheads section): also splits correctly', () => {
+    const sections = {
+      'trading income': { _total: 0, _rows: [] },
+      'cost of sales': { _total: 0, _rows: [] },
+      'operating expenses': {
+        _total: 0,
+        _rows: [
+          { name: 'Wages and Salaries', amount: 45212.71 },
+          { name: 'Superannuation', amount: 5500 },
+          { name: 'Rent', amount: 4666.67 },
+        ],
+      },
+    }
+    const result = mapPLToFinancials(sections, '2025-12')
+    expect(result.opex_wages).toBeCloseTo(45212.71, 2)
+    expect(result.opex_super).toBeCloseTo(5500, 2)
+    expect(result.opex_admin).toBeCloseTo(45212.71 + 5500, 2)
+    expect(result.opex_rent).toBeCloseTo(4666.67, 2)
+  })
+
+  it('opex_admin remains in the output object (backward compat)', () => {
+    const sections = {
+      'trading income': { _total: 0, _rows: [] },
+      'cost of sales': { _total: 0, _rows: [] },
+      'operating expenses': { _total: 0, _rows: [] },
+    }
+    const result = mapPLToFinancials(sections, '2025-07')
+    expect(result).toHaveProperty('opex_admin')
+    expect(result).toHaveProperty('opex_wages')
+    expect(result).toHaveProperty('opex_super')
+  })
+
+  it('"Payroll Tax" row counts as wages (not super) since it lacks "super"', () => {
+    const sections = {
+      'trading income': { _total: 0, _rows: [] },
+      'cost of sales': { _total: 0, _rows: [] },
+      'operating expenses': {
+        _total: 0,
+        _rows: [
+          { name: 'Salaries', amount: 40000 },
+          { name: 'Payroll Tax', amount: 2200 },
+          { name: 'Superannuation', amount: 4400 },
+        ],
+      },
+    }
+    const result = mapPLToFinancials(sections, '2025-08')
+    expect(result.opex_wages).toBeCloseTo(40000 + 2200, 2)
+    expect(result.opex_super).toBeCloseTo(4400, 2)
+  })
+})
+
 describe('mapPLToFinancials — COS classification (audit P1)', () => {
   it('bin-coded tipping rows roll into cos_disposal not cos_other', () => {
     const sections = {
@@ -357,6 +432,283 @@ describe('findCashBalance — handles "Binned-It Pty Ltd" bank row by section co
     expect(findCashBalance({})).toBe(0)
     expect(findCashBalance(null)).toBe(0)
     expect(findCashBalance({ Rows: [] })).toBe(0)
+  })
+})
+
+// ── findCashBalance — Liabilities exclusion (Sprint 15 #24) ─────────────────
+
+describe('findCashBalance — strict Liabilities exclusion (Sprint 15 #24)', () => {
+  it('two bank-named rows in Assets and Liabilities: only the Assets one counts', () => {
+    const fixture = {
+      Rows: [
+        {
+          RowType: 'Section',
+          Title: 'Assets',
+          Rows: [
+            {
+              RowType: 'Section',
+              Title: 'Bank',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Binned-It Pty Ltd' }, { Value: '50000' }] },
+              ],
+            },
+          ],
+        },
+        {
+          RowType: 'Section',
+          Title: 'Liabilities',
+          Rows: [
+            {
+              // Adversarial: section literally called "Bank" inside Liabilities.
+              // Older code that promoted "Bank" anywhere in the tree to inBank=true
+              // would have double-counted this. Explicit Liabilities exclusion blocks it.
+              RowType: 'Section',
+              Title: 'Bank',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Westpac Business Cash Reserve' }, { Value: '12345' }] },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    expect(findCashBalance(fixture)).toBe(50000)
+  })
+
+  it('Westpac Business Cash Reserve in Current Liabilities is excluded', () => {
+    const fixture = {
+      Rows: [
+        {
+          RowType: 'Section', Title: 'Assets',
+          Rows: [
+            { RowType: 'Section', Title: 'Bank',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Binned-It Pty Ltd' }, { Value: '77811.38' }] },
+              ],
+            },
+          ],
+        },
+        {
+          RowType: 'Section', Title: 'Liabilities',
+          Rows: [
+            { RowType: 'Section', Title: 'Current Liabilities',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Westpac Business Cash Reserve' }, { Value: '106.36' }] },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    expect(findCashBalance(fixture)).toBe(77811.38)
+  })
+})
+
+describe('parseBalanceSheet — Westpac liability never bleeds into cash (Sprint 15 #24)', () => {
+  it('Westpac Business Cash Reserve contributes ONLY to total_liabilities', () => {
+    const fixture = {
+      Rows: [
+        {
+          RowType: 'Section', Title: 'Assets',
+          Rows: [
+            { RowType: 'Section', Title: 'Bank',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Binned-It Pty Ltd' }, { Value: '77811.38' }] },
+              ],
+            },
+            { RowType: 'SummaryRow', Cells: [{ Value: 'Total Assets' }, { Value: '300000' }] },
+          ],
+        },
+        {
+          RowType: 'Section', Title: 'Liabilities',
+          Rows: [
+            { RowType: 'Section', Title: 'Current Liabilities',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Westpac Business Cash Reserve' }, { Value: '106.36' }] },
+                { RowType: 'Row', Cells: [{ Value: 'Accounts Payable' }, { Value: '5000' }] },
+              ],
+            },
+            { RowType: 'SummaryRow', Cells: [{ Value: 'Total Liabilities' }, { Value: '5106.36' }] },
+          ],
+        },
+      ],
+    }
+    const result = parseBalanceSheet(fixture)
+    expect(result.cash_balance).toBe(77811.38) // ONLY the Assets-side bank
+    expect(result.total_liabilities).toBe(5106.36)
+    expect(result.accounts_payable).toBe(5000)
+  })
+})
+
+// ── parseBalanceSheet — column coverage (audit P2 #28) ──────────────────────
+
+describe('parseBalanceSheet — column coverage for accounts_payable / fixed_assets / loans (Sprint 15 #28)', () => {
+  it('accounts_payable populated from Liabilities → "Accounts Payable" row', () => {
+    const fixture = {
+      Rows: [
+        {
+          RowType: 'Section', Title: 'Liabilities',
+          Rows: [
+            { RowType: 'Section', Title: 'Current Liabilities',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Accounts Payable' }, { Value: '12345.67' }] },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    expect(parseBalanceSheet(fixture).accounts_payable).toBe(12345.67)
+  })
+
+  it('fixed_assets populated from Assets → "Fixed Assets" / "Plant and Equipment" / "Vehicles"', () => {
+    const fixture = {
+      Rows: [
+        {
+          RowType: 'Section', Title: 'Assets',
+          Rows: [
+            { RowType: 'Section', Title: 'Fixed Assets',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Plant and Equipment' }, { Value: '85000' }] },
+                { RowType: 'Row', Cells: [{ Value: 'Motor Vehicles' }, { Value: '120000' }] },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    const result = parseBalanceSheet(fixture)
+    // Plant and Equipment + Motor Vehicles → both match (equipment / vehicle keywords)
+    expect(result.fixed_assets).toBe(85000 + 120000)
+  })
+
+  it('loan_current populated from Liabilities → "Loan - Current Portion"', () => {
+    const fixture = {
+      Rows: [
+        {
+          RowType: 'Section', Title: 'Liabilities',
+          Rows: [
+            { RowType: 'Section', Title: 'Current Liabilities',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Loan - Current Portion' }, { Value: '15000' }] },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    expect(parseBalanceSheet(fixture).loan_current).toBe(15000)
+  })
+
+  it('loan_noncurrent populated from Liabilities → "Long Term Loan"', () => {
+    const fixture = {
+      Rows: [
+        {
+          RowType: 'Section', Title: 'Liabilities',
+          Rows: [
+            { RowType: 'Section', Title: 'Non-Current Liabilities',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Long Term Loan' }, { Value: '85000' }] },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    expect(parseBalanceSheet(fixture).loan_noncurrent).toBe(85000)
+  })
+
+  it('total_loans = loan_current + loan_noncurrent (computed)', () => {
+    const fixture = {
+      Rows: [
+        {
+          RowType: 'Section', Title: 'Liabilities',
+          Rows: [
+            { RowType: 'Section', Title: 'Current Liabilities',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Loan - Current Portion' }, { Value: '15000' }] },
+              ],
+            },
+            { RowType: 'Section', Title: 'Non-Current Liabilities',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Long Term Loan' }, { Value: '85000' }] },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    const result = parseBalanceSheet(fixture)
+    expect(result.loan_current).toBe(15000)
+    expect(result.loan_noncurrent).toBe(85000)
+    expect(result.total_loans).toBe(100000)
+  })
+
+  it('full Xero-shaped fixture: every BS column populated correctly', () => {
+    const fixture = {
+      Rows: [
+        {
+          RowType: 'Section', Title: 'Assets',
+          Rows: [
+            { RowType: 'Section', Title: 'Bank',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Binned-It Pty Ltd' }, { Value: '77811.38' }] },
+              ],
+            },
+            { RowType: 'Section', Title: 'Current Assets',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Accounts Receivable' }, { Value: '118082.03' }] },
+              ],
+            },
+            { RowType: 'Section', Title: 'Fixed Assets',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Plant and Equipment' }, { Value: '50000' }] },
+                { RowType: 'Row', Cells: [{ Value: 'Motor Vehicles' }, { Value: '95000' }] },
+              ],
+            },
+            { RowType: 'SummaryRow', Cells: [{ Value: 'Total Assets' }, { Value: '340893.41' }] },
+          ],
+        },
+        {
+          RowType: 'Section', Title: 'Liabilities',
+          Rows: [
+            { RowType: 'Section', Title: 'Current Liabilities',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Accounts Payable' }, { Value: '8500' }] },
+                { RowType: 'Row', Cells: [{ Value: 'GST' }, { Value: '12000' }] },
+                { RowType: 'Row', Cells: [{ Value: 'PAYG Withholding' }, { Value: '6500' }] },
+                { RowType: 'Row', Cells: [{ Value: 'Loan - Current Portion' }, { Value: '15000' }] },
+                { RowType: 'Row', Cells: [{ Value: 'Westpac Business Cash Reserve' }, { Value: '106.36' }] },
+              ],
+            },
+            { RowType: 'Section', Title: 'Non-Current Liabilities',
+              Rows: [
+                { RowType: 'Row', Cells: [{ Value: 'Long Term Loan' }, { Value: '85000' }] },
+              ],
+            },
+            { RowType: 'SummaryRow', Cells: [{ Value: 'Total Liabilities' }, { Value: '127106.36' }] },
+          ],
+        },
+        {
+          RowType: 'Section', Title: 'Equity',
+          Rows: [
+            { RowType: 'SummaryRow', Cells: [{ Value: 'Total Equity' }, { Value: '213787.05' }] },
+          ],
+        },
+      ],
+    }
+    const result = parseBalanceSheet(fixture)
+    expect(result.cash_balance).toBe(77811.38)
+    expect(result.accounts_receivable).toBe(118082.03)
+    expect(result.fixed_assets).toBe(50000 + 95000)
+    expect(result.accounts_payable).toBe(8500)
+    expect(result.gst_liability).toBe(12000)
+    expect(result.payg_liability).toBe(6500)
+    expect(result.loan_current).toBe(15000)
+    expect(result.loan_noncurrent).toBe(85000)
+    expect(result.total_loans).toBe(100000)
+    expect(result.total_liabilities).toBe(127106.36)
+    expect(result.net_equity).toBe(213787.05)
   })
 })
 

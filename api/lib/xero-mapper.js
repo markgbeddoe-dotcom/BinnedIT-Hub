@@ -214,12 +214,30 @@ export function mapPLToFinancials(sections, month) {
   const opexStaffSection = sections['staffing overheads'] || { _total: 0, _rows: [] }
 
   const opexRows = opexMainSection._rows
-  // Wages can be in a dedicated 'staffing overheads' section OR inline in main opex
-  const opexWagesInline = opexRows
-    .filter(r => /wage|salary|super|payroll/i.test(r.name))
-    .reduce((s, r) => s + r.amount, 0)
+  // Sprint 15 #26: split staffing into wages and super for clarity (was bundled in opex_admin)
+  // Wages and super can live in a dedicated 'staffing overheads' section OR be inline in
+  // main opex. We split each side independently so the two output columns are reliable.
+  //
+  // Wages = wage|salar|payroll (NOT super); Super = super|superannuation.
+  // 'salar' (not 'salary') so we catch both "Salary" and "Salaries".
+  const isWagesRow = (n) => /wage|salar|payroll/i.test(n) && !/super/i.test(n)
+  const isSuperRow = (n) => /super/i.test(n) // matches 'super' and 'superannuation'
+
+  const opexWagesInline = opexRows.filter(r => isWagesRow(r.name)).reduce((s, r) => s + r.amount, 0)
+  const opexSuperInline = opexRows.filter(r => isSuperRow(r.name)).reduce((s, r) => s + r.amount, 0)
+  const opexWagesStaff  = opexStaffSection._rows.filter(r => isWagesRow(r.name)).reduce((s, r) => s + r.amount, 0)
+  const opexSuperStaff  = opexStaffSection._rows.filter(r => isSuperRow(r.name)).reduce((s, r) => s + r.amount, 0)
+
+  // Prefer staffing-overheads section if present; otherwise fall back to inline opex matches.
+  const opexWages = opexWagesStaff !== 0 ? opexWagesStaff : opexWagesInline
+  const opexSuper = opexSuperStaff !== 0 ? opexSuperStaff : opexSuperInline
+
   const opexStaffTotal = opexStaffSection._total || opexStaffSection._rows.reduce((s, r) => s + r.amount, 0)
-  const opexAdmin = opexStaffTotal !== 0 ? opexStaffTotal : opexWagesInline
+  // Legacy aggregate kept for backward compat (dashboard tiles using opex_admin).
+  // Prefer the explicit wages+super sum when we have it; fall back to staffing-section total
+  // for older callers/fixtures that lump everything into one row.
+  const opexAdminSplit = opexWages + opexSuper
+  const opexAdmin = opexAdminSplit !== 0 ? opexAdminSplit : opexStaffTotal
 
   const opexRent = opexRows.filter(r => /rent|lease/i.test(r.name)).reduce((s, r) => s + r.amount, 0)
   const opexAdvert = opexRows.filter(r => /adverti|market|promo/i.test(r.name)).reduce((s, r) => s + r.amount, 0)
@@ -252,7 +270,9 @@ export function mapPLToFinancials(sections, month) {
     gross_profit: grossProfit,
     gross_margin_pct: Math.round(grossMarginPct * 10) / 10,
     opex_rent: opexRent,
-    opex_admin: opexAdmin,
+    opex_admin: opexAdmin,        // legacy aggregate = opex_wages + opex_super (audit P2 #26)
+    opex_wages: opexWages,        // Sprint 15 #26 — Wages and Salaries (excl. super)
+    opex_super: opexSuper,        // Sprint 15 #26 — Superannuation
     opex_advertising: opexAdvert,
     opex_insurance: opexInsur,
     opex_other: opexOther,
@@ -279,15 +299,28 @@ export function findCashBalance(report) {
 
   let cash = 0
 
+  // Sprint 15 #24 — explicit Liabilities exclusion. If at any point during recursion
+  // we cross into a Liabilities/Equity section, we STOP accumulating cash even if
+  // a parent label upstream said "Bank". Westpac Business Cash Reserve is a current
+  // liability (overdraft/cash reserve facility) — it must NEVER be pulled into cash.
   function walkInAssets(rows, inAssets, inBank) {
     for (const row of rows) {
       if (!row) continue
       if (row.RowType === 'Section') {
         const title = (row.Title || '').toLowerCase()
+        // If this section is Liabilities or Equity, that branch is OUT regardless of
+        // any ancestor's label. Reset both flags so descendants can't accumulate.
+        const isLiabilityScope = title.includes('liabilit') || title.includes('equity')
+        if (isLiabilityScope) {
+          // Skip this entire subtree for cash purposes.
+          continue
+        }
         const nowInAssets = inAssets || title.includes('asset')
         const nowInBank = nowInAssets && (inBank || title.includes('bank'))
         if (row.Rows) walkInAssets(row.Rows, nowInAssets, nowInBank)
-      } else if (row.RowType === 'Row' && inBank && row.Cells?.length >= 2) {
+      } else if (row.RowType === 'Row' && inAssets && inBank && row.Cells?.length >= 2) {
+        // Both flags must be true — if inAssets is false for any reason
+        // (e.g. we crossed into Liabilities), do NOT count.
         const amt = parseAmount(row.Cells[1]?.Value)
         cash += amt
       }
