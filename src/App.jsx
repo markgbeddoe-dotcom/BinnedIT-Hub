@@ -44,6 +44,7 @@ import NotificationBell from './components/NotificationBell';
 // React Query hooks
 import { useAvailableMonths } from './hooks/useMonthData';
 import { useBreakpoint } from './hooks/useBreakpoint';
+import { useAuth } from './context/AuthContext';
 import { createReport, upsertFinancials, upsertCompliance } from './api/reports';
 import { queryClient } from './hooks/queryClient';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -109,6 +110,8 @@ export default function App() {
   });
 
   const { isMobile } = useBreakpoint();
+  const { profile } = useAuth();
+  const greetingName = profile?.full_name?.split(' ')[0] || 'there';
 
   // React Query: available months from Supabase with fallback
   const { data: supabaseMonths } = useAvailableMonths();
@@ -302,7 +305,7 @@ export default function App() {
   const Home = () => (
     <div style={{maxWidth:900,margin:'0 auto',padding:'40px 24px'}}>
       <div style={{textAlign:'center',marginBottom:40}}>
-        <h1 style={{fontFamily:fontHead,fontSize:28,fontWeight:700,color:B.textPrimary,margin:0,letterSpacing:'0.04em'}}>Welcome back, Mark</h1>
+        <h1 style={{fontFamily:fontHead,fontSize:28,fontWeight:700,color:B.textPrimary,margin:0,letterSpacing:'0.04em'}}>Welcome back, {greetingName}</h1>
         <p style={{color:B.textMuted,fontSize:14,marginTop:8}}>Data: Jul 2025 – {selLabel} ({monthCount} month{monthCount>1?'s':''}) &nbsp;|&nbsp; Last updated: {selLabel}</p>
       </div>
       <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(3,1fr)',gap:16}}>

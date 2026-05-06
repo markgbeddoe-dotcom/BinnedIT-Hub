@@ -70,7 +70,8 @@ export function AuthProvider({ children }) {
     signIn,
     signOut,
     isOwner: profile?.role === 'owner',
-    isManager: ['owner', 'manager'].includes(profile?.role),
+    isManager: ['owner', 'manager', 'fleet_manager'].includes(profile?.role),
+    isBookkeeper: ['owner', 'bookkeeper'].includes(profile?.role),
     canWrite: ['owner', 'bookkeeper'].includes(profile?.role),
   }
 

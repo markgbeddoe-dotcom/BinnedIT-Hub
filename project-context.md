@@ -100,6 +100,14 @@ For decision rationales, read `BinnedIT-Hub/ARCHITECTURE.md` (ADR-001..018). For
 - The wizard writes to BOTH `localStorage` (immediate backup) AND Supabase (best-effort). Supabase failure is non-fatal.
 - Per-month partitioning: `monthly_reports.report_month` is `UNIQUE`. Every per-month table FKs back to `monthly_reports.id` with `ON DELETE CASCADE`.
 - New Supabase data functions go in `src/api/<domain>.js`. New hooks go in `src/hooks/use<Domain>.js`. Never bypass these layers from a component.
+- **⚠ Known integrity issues as of 2026-05-06** (see `docs/audits/2026-05-06/audit-reconciliation.md` for full evidence; `docs/audits/2026-05-06/FIXES-NEEDED.md` for the prioritised backlog):
+  - Xero `mapPLToFinancials` mis-classifies ~64% of YTD revenue ($1.0M) into `rev_other` — WMF/CON/Transport SKUs don't match the keyword classifier; `rev_general` is hard-coded to 0.
+  - `Math.abs()` on negative trading-income rows inflates revenue by ~$340 YTD (customer credits become positive revenue).
+  - `parseBalanceSheet` cash matcher misses the $77,811 operating account because the bank row is named "Binned-It Pty Ltd" (no `cash`/`bank`/`westpac` keyword).
+  - AR sync is fully disabled (`void arData` in `syncMonth()`); `debtors_monthly` receives zero rows from Xero.
+  - PricingTab uses real bin data only when `monthIndex === 7` (Feb 2026); other months extrapolate from YTD proportions and are unreliable.
+  - Several tabs (FleetTab, DebtorsTab, BDMTab, SnapshotTab cash/AR) fall back to non-month-keyed `D.*` data — switching months silently shows Feb 2026.
+  - Until these are fixed, treat any per-month dashboard number for any month other than Feb 2026 as suspect, and treat the live Xero sync output as unsuitable for business decisions.
 
 ### AI / Streaming Rules
 
@@ -137,6 +145,12 @@ For decision rationales, read `BinnedIT-Hub/ARCHITECTURE.md` (ADR-001..018). For
 - Commit messages are descriptive prose; no enforced convention (Conventional Commits, etc.) — match the existing history.
 - For Edge Function or AI/invite work, run `vercel dev` locally — `npm run dev` alone won't execute `api/*.js`.
 - `BinnedIT-Hub/CLAUDE.md` documents autonomous-action allowlist for Claude Code (e.g. `supabase db push`, `git push origin master`, `npm run dev`/`build`). When operating in that mode, those are pre-approved.
+
+### Auth / RBAC Rules
+
+- The role values stored in `profiles.role` are `owner | manager | bookkeeper | viewer | fleet_manager`. The `useAuth()` value exposes `isOwner`, `isManager` (owner / manager / fleet_manager), `isBookkeeper` (owner / bookkeeper), `canWrite` (owner / bookkeeper). All four must exist — `isBookkeeper` was historically missing and silently broke Sarah's invoice/sync writes.
+- Route-level RBAC: `main.jsx` AuthGate currently lets any authenticated session reach all admin routes. The `/investor` allowlist for the viewer role is open work (see `docs/audits/2026-05-06/FIXES-NEEDED.md` item #12).
+- Driver portal lives at `/driver` and `/driver/*` (singular) and handles its own auth. Admin "manage drivers" should NOT collide with this — `main.jsx` matches the singular path with regex `/^\/driver(\/|$)/`. Adding an admin "Drivers" admin page belongs at a new path (e.g. `/admin/drivers`), not `/drivers`.
 
 ### Critical Don't-Miss Rules
 

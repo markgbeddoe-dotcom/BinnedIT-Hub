@@ -24,8 +24,9 @@ function AuthGate() {
     return <EmbedBookingPage tenantSlug={tenantSlug} />
   }
 
-  // Driver portal — handles its own auth internally
-  if (location.pathname.startsWith('/driver')) return <DriverApp />
+  // Driver portal — handles its own auth internally.
+  // Match /driver and /driver/* exactly (singular) — must NOT match /drivers (admin route).
+  if (/^\/driver(\/|$)/.test(location.pathname)) return <DriverApp />
 
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#D8D5E0', color:'#1A1A1A', fontFamily:'DM Sans, sans-serif', fontSize:16 }}>
