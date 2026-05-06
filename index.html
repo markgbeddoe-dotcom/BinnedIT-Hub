@@ -4,11 +4,26 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SkipSync</title>
-  <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#EFDF0F">
+  <link rel="manifest" href="/manifest.json" id="pwa-manifest">
+  <meta name="theme-color" content="#EFDF0F" id="pwa-theme-color">
   <link rel="apple-touch-icon" href="/logo.jpg">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/jpeg" href="/logo.jpg">
+  <script>
+    // Sprint 11D: switch to driver-specific PWA manifest when running under /driver/*.
+    // Synchronous so it happens before the browser parses the install prompt.
+    // (Audit-ux.md §3 P0: single-manifest meant 'Install SkipSync' from /driver
+    // installed the admin Hub instead of the driver app.)
+    (function () {
+      try {
+        if (window.location.pathname === '/driver' || window.location.pathname.indexOf('/driver/') === 0) {
+          document.getElementById('pwa-manifest').setAttribute('href', '/driver-manifest.json');
+          var theme = document.getElementById('pwa-theme-color');
+          if (theme) theme.setAttribute('content', '#1A1A2E');
+        }
+      } catch (e) { /* non-fatal */ }
+    })();
+  </script>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }

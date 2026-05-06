@@ -7,6 +7,21 @@ This file is the single source of truth for what needs to happen next. Group by 
 
 ---
 
+## Sprint 11 — "Make it usable" — closed 2026-05-07
+
+| # | Item | Status |
+|---|---|---|
+| 22 | Dashboard tab labels — plain English | ✅ DONE — SNAPSHOT/REVENUE/.../WORK PLAN renamed to Overview/Sales/Profit/Compare/Competitors/Prices/New Customers/Trucks & Bins/Who Owes Us/Cash/Compliance/Action List. Dropped uppercase styling. |
+| (audit-ux §2.2) | LoginPage polish | ✅ DONE — dropped hardcoded `you@binnedit.com.au` placeholder + tenant footer leak; added Forgot password (uses Supabase resetPasswordForEmail) + driver portal entry link; uses theme.js tokens not local palette. |
+| (audit-ux §2.5) | MobileNav Wizard reachable | ✅ DONE — replaced opaque "Collect" item with "Load Data" (📥); Sarah can now reach the wizard from any mobile page. Collections still reachable from the side menu. |
+| (Sprint 10 #11 follow-up) | Settings → Company Identity editor | ✅ DONE — owner-only `<CompanyIdentityEditor />` in SettingsPage. Reads/writes `platform_settings.company.*` keys. Once real ABN/BSB are saved, `useCompanyConfig().hasPlaceholders` flips to false and Sarah can dispatch letters. |
+| 14 | Bin-type canonicalization | ✅ DONE (JS layer) — `src/lib/binTypes.js` with `normalizeBinType()` + `normalizeCompetitorBinType()` exposed. 58 Vitest assertions over real Bin Manager / Xero / competitor variants. PricingTab `binNameMap` replaced with normalizer call. **SQL CHECK constraint deferred** — needs a backfill migration first to canonicalise existing rows in `bin_type_performance` and `competitor_rates`; otherwise the CHECK would reject live data. Tracked as a follow-up. |
+| 16 | Driver PWA — separate manifest | ✅ DONE (manifest layer) — `public/driver-manifest.json` with `start_url:'/driver'`, `scope:'/driver'`, dark-theme background. `index.html` switches the `<link rel="manifest">` href + theme-color synchronously when the path starts with `/driver`. **Offline write queue + separate SW deferred to Sprint 12** (Workbox setup is a multi-hour focused task). |
+
+**Verification:** `npm run build` exits 0 errors; `npm test` 164/164 passing (58 new assertions over `binTypes.test.js`); `npm run test:e2e` 2/2 passing.
+
+---
+
 ## Sprint 10 Unblock — closed 2026-05-07
 
 | # | Item | Status |

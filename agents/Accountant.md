@@ -350,6 +350,38 @@ This pattern means we can never silently drop a new SKU again — the assertion 
 
 **Post-deploy reconciliation cycle (next time Meg is invoked):** trigger a fresh Xero sync for March 2026 (a fully-closed month) and run the 5-way reconciliation. Confirm `rev_other / rev_total < 1%` (was 64%), `cash_balance == Xero bank total` (was $0), `debtors_monthly` count > 0 (was 0). If those three checks pass, the Sprint 10 fixes have landed correctly in production.
 
+---
+
+### 2026-05-07 — Sprint 11 "Make it usable"
+
+Continuation of Sprint 10. Focus shifted from data integrity to user-facing usability + the follow-up items that Sprint 10 left dangling.
+
+**What landed:**
+- **Dashboard tab labels (audit #22).** Renamed all 12 ALL-CAPS jargon labels to plain English (Overview / Sales / Profit / Compare / Competitors / Prices / New Customers / Trucks & Bins / Who Owes Us / Cash / Compliance / Action List). The kid test from `audit-ux.md §1.1` should now pass on this dimension. Tab IDs unchanged so no routing/hook break.
+- **LoginPage cleanup.** Dropped hardcoded `you@binnedit.com.au` placeholder (white-label leak); added Forgot Password (Supabase `resetPasswordForEmail`); added "Are you a driver?" link to `/driver`; switched to theme.js tokens from the local `brand` palette.
+- **MobileNav Load Data.** Replaced the opaque "Collect" (⚖️) bottom-nav item with "Load Data" (📥) since Sarah on mobile previously couldn't reach the wizard without bouncing through Home. Collections is still reachable from the hamburger side menu.
+- **Settings → Company Identity editor.** New `<CompanyIdentityEditor />` in SettingsPage. Owner-only. Reads/writes `platform_settings.company.*` keys (name, ABN, ACN, address, phone, email, BSB, account number, penalty interest rate). Until real values are saved here, the Collections Send button stays disabled — closes the Sprint 10 #11 follow-up.
+- **Bin-type canonicalization (audit #14, JS layer).** New `src/lib/binTypes.js` with `normalizeBinType()` + `normalizeCompetitorBinType()` and 58 Vitest assertions covering every legacy variant (`WMF -1.1`, `WMF - 6m Heavy`, `ASB - 4m`, `S - 6m (346)`, `4m³ GW`, etc.). PricingTab now routes through the normalizer instead of the hand-maintained `binNameMap`.
+- **Driver PWA separation (audit #16, manifest layer).** New `public/driver-manifest.json` with `start_url:'/driver'`, `scope:'/driver'`, dark theme. `index.html` switches the `<link rel="manifest">` href synchronously based on URL path before React boots. Installing from `/driver` now installs the driver app, not the admin Hub.
+
+**Source-of-truth updates:**
+- The bin-type schema across `binTypesData`, `pricingData`, `competitor_rates.bin_type`, `bin_type_performance.bin_type` is no longer the most-fragmented surface in the codebase. The canonical names live in `binTypes.js` and the test file documents every accepted variant. Future bin SKU additions should be added as Vitest cases.
+- `platform_settings.company.*` is now the source of truth for legal-letter ABN/ACN/BSB. The placeholders in `legalTemplates.js` remain only as fallback for unconfigured environments and the UI gates against using them.
+
+**Deferred to Sprint 12 (still in `FIXES-NEEDED.md`):**
+- SQL CHECK constraint on `bin_type_performance.bin_type` and `competitor_rates.bin_type` — needs a backfill UPDATE migration first (run `normalizeBinType()` over every existing row, fix any nulls, then add the CHECK). Two-phase change — risky to bundle.
+- Driver app offline write queue (Workbox or IndexedDB-backed retry-on-online).
+- Driver app v0.5 → v1: Arrived state, mandatory delivery photo, OCR for tip dockets.
+- Wire Resend (or postal) for genuine Collections letter dispatch (currently "manual mark" only).
+- Twilio SMS for booking confirmations.
+- JobCostingWidget orphan — wire it into Dispatch board.
+- Mobile nav full-tab-picker drawer so all 12 dashboard tabs are reachable on mobile (currently only "Reports" maps to /dashboard/snapshot).
+
+**Pre-deploy verification:**
+- `npm run build` — 0 errors
+- `npm test` — 164/164 passing (58 new in `binTypes.test.js`)
+- `npm run test:e2e` — 2/2 passing (login smoke at desktop + mobile)
+
 **Deferred to next session** (each carries P0/P1 — see `FIXES-NEEDED.md`):
 - Xero sync mapping rewrite (revenue, COS, cash, AR — items 1-4).
 - Per-month fallback arrays + PricingTab Feb-only branch (items 5-6).
