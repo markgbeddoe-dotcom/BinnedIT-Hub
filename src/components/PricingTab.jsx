@@ -4,6 +4,7 @@ import { useBreakpoint } from '../hooks/useBreakpoint';
 import { pricingData, binTypesData, totalRevenue, totalCOS, totalOpex, fuelCosts, wages, tolls, repairs, rent, advertising, competitorData } from '../data/financials';
 import { allocateCosts, getJobCostBarSegments } from '../data/costAllocator';
 import { normalizeBinType } from '../lib/binTypes';
+import { roundMoney, avgPrice } from '../lib/money';
 
 // Sprint 11 #14: replaced the hand-maintained binNameMap with normalizeBinType
 // from src/lib/binTypes.js (Vitest-tested, accepts every legacy variant).
@@ -14,8 +15,10 @@ function mapBinTypeName(legacyName) {
   return normalizeBinType(legacyName) || legacyName;
 }
 
-// Market ranges converted to ex GST (competitor websites show inc GST)
-const exG = v => Math.round(v / 1.1);
+// Market ranges converted to ex GST (competitor websites show inc GST).
+// Sprint 14 #29: use roundMoney (cents-precision) instead of Math.round
+// (whole-dollar) so this matches the canonical money rounding contract.
+const exG = v => roundMoney(v / 1.1);
 const marketRanges = {
   '4m General Waste': { low: exG(350), high: exG(440), label: '$318-$400 ex' },
   '6m General Waste': { low: exG(500), high: exG(800), label: '$455-$727 ex' },
@@ -71,10 +74,10 @@ export default function PricingTab({ monthIndex = 7, monthLabel = 'Feb 2026' }) 
         const share = ytdTotalRev > 0 ? p.rev / ytdTotalRev : 0;
         const estIncome = curRev * share;
         const estJobs = Math.max(1, Math.round((p.jobs / 8) * monthScale));
-        curBins[p.type] = { income: estIncome, jobs: estJobs, avgRate: estJobs > 0 ? Math.round(estIncome / estJobs) : p.avgRate };
+        curBins[p.type] = { income: estIncome, jobs: estJobs, avgRate: estJobs > 0 ? avgPrice(estIncome, estJobs) : p.avgRate };
       });
     }
-    Object.values(curBins).forEach(cb => { if (cb.jobs > 0 && cb.avgRate === 0) cb.avgRate = Math.round(cb.income / cb.jobs); });
+    Object.values(curBins).forEach(cb => { if (cb.jobs > 0 && cb.avgRate === 0) cb.avgRate = avgPrice(cb.income, cb.jobs); });
     const curTotalBinRev = Object.values(curBins).reduce((s, b) => s + b.income, 0);
 
     return ytdAllocated.map(ytd => {
@@ -108,7 +111,7 @@ export default function PricingTab({ monthIndex = 7, monthLabel = 'Feb 2026' }) 
       const avgMonthOH = priorCount > 0 ? ytdExCurOH / priorCount : 0;
       const avgMonthProfit = avgMonthRev - avgMonthDirect - avgMonthOH;
       const avgMonthNP = avgMonthRev > 0 ? (avgMonthProfit / avgMonthRev * 100) : 0;
-      const avgMonthRate = avgMonthJobs > 0 ? Math.round(avgMonthRev / avgMonthJobs) : 0;
+      const avgMonthRate = avgPrice(avgMonthRev, avgMonthJobs);
 
       const avgPerJob = avgMonthJobs > 0 ? {
         revenue: avgMonthRev / avgMonthJobs,

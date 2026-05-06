@@ -2,7 +2,40 @@ import React, { useState, useEffect } from 'react';
 import { B, fontHead, fmtFull } from '../theme';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import { useCompetitorRates, useUpsertRate, useDeleteRate } from '../hooks/useCompetitors';
+import { normalizeCompetitorBinType } from '../lib/binTypes';
 import AIInsightsPanel from './AIInsightsPanel';
+
+/**
+ * Sprint 14 #30 — competitor rate name normalization. Closes audit
+ * `docs/audits/2026-05-06/audit-pricing-bugs.md` §4: `c.rates[service]` was
+ * a case-sensitive direct property lookup. A competitor entered as
+ * "4m General Waste" instead of the column header "4m³ GW" silently dropped
+ * out of the comparison.
+ *
+ * lookupRate(competitor, serviceName):
+ *   1. Try direct match on the column header (preserves perf in the common case).
+ *   2. Otherwise normalize the column header to canonical form and scan the
+ *      competitor's rates keys (case-insensitive after normalizer) for any
+ *      key that maps to the same canonical name.
+ *   3. Return undefined if nothing matches (caller already treats undefined
+ *      as "no data" — same contract as before).
+ */
+function lookupRate(competitor, serviceName) {
+  if (!competitor || !competitor.rates) return undefined;
+  // 1. Direct match (fast path, preserves identity for both number and string rates)
+  if (Object.prototype.hasOwnProperty.call(competitor.rates, serviceName)) {
+    return competitor.rates[serviceName];
+  }
+  // 2. Normalize the requested service to canonical, then scan stored keys
+  const canonical = normalizeCompetitorBinType(serviceName);
+  if (!canonical) return undefined;
+  for (const key of Object.keys(competitor.rates)) {
+    if (normalizeCompetitorBinType(key) === canonical) {
+      return competitor.rates[key];
+    }
+  }
+  return undefined;
+}
 
 const defaultBinServices = [
   '4m³ GW','6m³ GW','8m³ GW','10m³ GW','12m³ GW','16m³ GW','23m³ GW',
@@ -120,9 +153,13 @@ export default function CompetitorPage({ onBack }) {
         const n = parseFloat(val.replace(/[$,]/g,''));
         const finalVal = !isNaN(n) ? n : null;
         if (finalVal !== null) {
+          // Sprint 14 #30: normalize bin_type before writing so future joins work.
+          // Falls back to the raw service string if normalizer can't map it
+          // (e.g. a brand-new bin type) — better to store *something* than drop.
+          const canonicalBinType = normalizeCompetitorBinType(editingCell.service) || editingCell.service;
           upsertRate.mutate({
             competitorName: comp.name,
-            binType: editingCell.service,
+            binType: canonicalBinType,
             rate: finalVal,
             notes: comp.source || null,
           });
@@ -149,7 +186,7 @@ export default function CompetitorPage({ onBack }) {
   const getComparison = (service) => {
     const yours = binnedItRates[service];
     if (!yours) return null;
-    const compRates = competitors.map(c => c.rates[service]).filter(r => typeof r === 'number' && r > 0);
+    const compRates = competitors.map(c => lookupRate(c, service)).filter(r => typeof r === 'number' && r > 0);
     if (!compRates.length) return null;
     const avg = compRates.reduce((a,b) => a + b, 0) / compRates.length;
     return {avg: Math.round(avg), diff: Number(((yours-avg)/avg*100).toFixed(0)), yours};
@@ -163,7 +200,7 @@ export default function CompetitorPage({ onBack }) {
     `Competitors with data: ${competitors.filter(c => Object.keys(c.rates).length > 0).map(c => `${c.name} (${Object.keys(c.rates).length} rates)`).join(', ')}`,
     `Services above market average: ${binServices.filter(s => { const c = getComparison(s); return c && c.diff > 0; }).join(', ') || 'none'}`,
     `Services below market average: ${binServices.filter(s => { const c = getComparison(s); return c && c.diff < 0; }).join(', ') || 'none'}`,
-    `Services with no competitor data: ${binServices.filter(s => !competitors.some(c => typeof c.rates[s] === 'number')).join(', ')}`,
+    `Services with no competitor data: ${binServices.filter(s => !competitors.some(c => typeof lookupRate(c, s) === 'number')).join(', ')}`,
     `Market: Melbourne skip bin hire, Seaford area. Key competitors: ${competitors.map(c => c.name).join(', ')}`,
     `Industry context: Residential and commercial skip bin hire. Products include general waste, asbestos, contaminated soil, green waste. Highly price-sensitive residential market, less so for commercial/regulated waste (asbestos, soil).`,
   ].join('\n');
@@ -237,7 +274,7 @@ export default function CompetitorPage({ onBack }) {
                 <td style={{padding:'8px 10px',fontWeight:600,position:'sticky',left:0,background:B.cardBg,zIndex:1}}>{service}</td>
                 <td style={{padding:'8px 10px',textAlign:'center',background:`${B.yellow}06`,fontWeight:700,color:B.yellow}}>{binnedItRates[service]?`$${binnedItRates[service]}`:'—'}</td>
                 {competitors.map((c,ci)=>{
-                  const rate = c.rates[service];
+                  const rate = lookupRate(c, service);
                   const compId = c.id || c.name;
                   const isEd = editingCell?.compId === compId && editingCell?.service === service;
                   return (
@@ -264,7 +301,7 @@ export default function CompetitorPage({ onBack }) {
 
       <div style={{display:'grid',gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(3,1fr)',gap:12,marginTop:20}}>
         {[
-          {t:"Services With Data",v:`${binServices.filter(s=>competitors.some(c=>c.rates[s])).length} / ${binServices.length}`,c:B.textPrimary},
+          {t:"Services With Data",v:`${binServices.filter(s=>competitors.some(c=>lookupRate(c, s))).length} / ${binServices.length}`,c:B.textPrimary},
           {t:"Premium Position",v:`${binServices.filter(s=>{const c=getComparison(s);return c&&c.diff>0;}).length}`,c:B.green},
           {t:"Below Market",v:`${binServices.filter(s=>{const c=getComparison(s);return c&&c.diff<0;}).length}`,c:B.red}
         ].map((k,i)=>(
