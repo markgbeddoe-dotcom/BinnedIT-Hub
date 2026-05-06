@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -12,7 +12,7 @@ import DriverApp from './components/driver/DriverApp'
 import { queryClient } from './hooks/queryClient'
 
 function AuthGate() {
-  const { session, loading } = useAuth()
+  const { session, loading, profile } = useAuth()
   const location = useLocation()
 
   // Public routes — no auth required
@@ -34,6 +34,18 @@ function AuthGate() {
     </div>
   )
   if (!session) return <LoginPage />
+
+  // Investor RBAC sandbox (audit P0-12). Viewer role only sees /investor.
+  // Any other path is redirected. Per PRD-v6 §4.6 Andrew the investor must
+  // not see operational data (dispatch, customers, collections, invoices).
+  const role = profile?.role
+  if (role === 'viewer' || role === 'investor') {
+    if (location.pathname !== '/investor') {
+      return <Navigate to="/investor" replace />
+    }
+    return <InvestorView />
+  }
+
   return (
     <Routes>
       <Route path="/investor" element={<InvestorView />} />

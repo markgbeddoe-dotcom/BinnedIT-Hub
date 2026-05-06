@@ -90,6 +90,7 @@ const menuItems = [
   // Reports section
   {id:'dashboard',icon:'📊',label:'Reports',section:'REPORTS'},
   {id:'history',icon:'🗓️',label:'Monthly History',section:null},
+  {id:'month-select',icon:'📥',label:'Load Data',section:null},
   // System
   {id:'settings',icon:'⚙️',label:'Settings',section:'SYSTEM'},
   {id:'about',icon:'ℹ️',label:'About',section:null},

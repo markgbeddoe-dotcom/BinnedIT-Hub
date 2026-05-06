@@ -302,6 +302,54 @@ This was the first full audit. Five parallel investigations were run (reconcilia
 - ✅ Routing collision /driver vs /drivers (main.jsx regex).
 - ✅ "Welcome back, {name}" reads from profile.
 
+---
+
+### 2026-05-07 — Sprint 10 Unblock (Xero data integrity rewrite)
+
+Picked up the prioritised backlog from `FIXES-NEEDED.md` and closed all eight planned items in a single TDD-driven push.
+
+**Approach.** Extracted `mapPLToFinancials`, `parseBalanceSheet`, `parseAgedReceivables` and friends from the live Edge Function (`api/xero-sync.js`) into a pure module (`api/lib/xero-mapper.js`). Wrote 99 Vitest assertions against the real SKU names from the parsed Binned-IT Xero exports BEFORE touching the implementation. Iterated until all 99 went green. Then wired `xero-sync.js` to import from the extracted module.
+
+**What changed at the data layer:**
+- **Revenue classifier** is now prefix-based with descriptive-keyword fallbacks. Every WMF/CON/Transport/Tonnage/Recycling-Income/Fuel-Levy SKU now maps to `rev_general`. The previously-hard-coded `rev_general: 0` is now populated from real data. `rev_other` only catches genuinely unknown SKU names (with diagnostic logging via `_diagnostic.unclassified_trading_income`).
+- **Sign preservation.** The trading-income loop no longer applies `Math.abs()`. Customer credits correctly reduce revenue. (Test: a `WMF -1500` row alongside a `WMF +1000` row produces `rev_general = -500`, not `+2500`.)
+- **Cash matcher** now walks the Assets→Bank section by structure (not by row name). The Binned-It operating account (named "Binned-It Pty Ltd") is picked up via section context. Westpac Business Cash Reserve (which is in Liabilities) is correctly excluded.
+- **AR sync re-enabled.** `parseAgedReceivables` reads Cells[1..6] (the Older bucket was being silently dropped). Per-debtor rows now write to `debtors_monthly` via DELETE+INSERT keyed by report_month. The `void arData;` line is gone.
+- **COS classifier** picks up bin-coded prefixes (W-, WMF-, ASB-, S-, GW-, C-, CON-) for tipping/disposal cost detection, plus explicit "tipping/disposal/landfill/recycling cost" language.
+- **parseAmount** now handles parenthesised negatives (e.g. `(1,500)` → -1500), addressing the P2 finding.
+
+**What changed at the application layer:**
+- New `useCompanyConfig()` hook reads ABN/ACN/BSB/etc. from `platform_settings` (key/value table from migration 015). Returns `{ company, hasPlaceholders }`.
+- `legalTemplates.js` exports now accept a `company` parameter (last position, defaults to placeholders for backward compat). All four templates (account contract, director guarantee, collections letter, security-over-assets) take it.
+- CollectionsPage shows an amber warning banner when placeholders are detected, defaults the delivery dropdown to "Mark as sent (manual)", warns that email/post dispatch isn't yet wired, and disables the Send button entirely while placeholders are present.
+- main.jsx AuthGate now sandboxes `viewer`/`investor` role to `/investor` only (Andrew can no longer see /dispatch, /customers, etc.).
+- Side menu now includes `Load Data` (📥) under Reports — Sarah no longer needs to bounce to Home to reach the wizard.
+
+**Source-of-truth confirmation.** The `xero-mapper.test.js` file is now the canonical contract for what the SkipSync schema means in terms of Xero data. Future SKU additions to the Binned-IT chart of accounts should:
+1. Get a new test case added (e.g. `['NEW_SKU - 4m', 'general']`).
+2. Run `npm test` — if the new SKU falls into `rev_other`, the diagnostic test fails, exposing the gap.
+3. Update the classifier's prefix or keyword list to handle it, then re-run.
+
+This pattern means we can never silently drop a new SKU again — the assertion fires on the next test run.
+
+**Process change.** Period-close working papers should now include a brief "What changed since last close" footer pointing to the relevant Vitest fixture additions. If a SKU was added/renamed in Xero, the working paper notes which test fixture was updated.
+
+**Recurrence risk reduction.** The original keyword-based classifier was the highest-risk piece — every new SKU silently widened the gap. With Vitest fixtures driven by the actual exports, additions are caught at CI time rather than at month-end reconciliation.
+
+**Still open from `FIXES-NEEDED.md` (post-Sprint-10 backlog):**
+- Wire Resend (or postal) for genuine Collections letter dispatch (item #10 — currently "manual mark" only).
+- Bin-type name fragmentation (item #14) — needs a CHECK constraint migration (017_canonical_bin_types.sql).
+- Loss-making bin detection on derived metrics (item #15) — needs per-bin cost detail columns.
+- Driver app PWA separation + offline write queue (#16-#18).
+- ALL-CAPS dashboard tab rename + mobile nav rework (#22-#23).
+
+**Pre-deploy verification (this session):**
+- `npm run build` — 0 errors
+- `npm test` — 106/106 passing (includes 99 new assertions in `api/lib/xero-mapper.test.js`)
+- Functional verification of behaviour against parsed Xero JSON: see test assertions in `api/lib/xero-mapper.test.js`
+
+**Post-deploy reconciliation cycle (next time Meg is invoked):** trigger a fresh Xero sync for March 2026 (a fully-closed month) and run the 5-way reconciliation. Confirm `rev_other / rev_total < 1%` (was 64%), `cash_balance == Xero bank total` (was $0), `debtors_monthly` count > 0 (was 0). If those three checks pass, the Sprint 10 fixes have landed correctly in production.
+
 **Deferred to next session** (each carries P0/P1 — see `FIXES-NEEDED.md`):
 - Xero sync mapping rewrite (revenue, COS, cash, AR — items 1-4).
 - Per-month fallback arrays + PricingTab Feb-only branch (items 5-6).

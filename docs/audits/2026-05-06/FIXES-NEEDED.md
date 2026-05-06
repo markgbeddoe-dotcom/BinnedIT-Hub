@@ -7,6 +7,27 @@ This file is the single source of truth for what needs to happen next. Group by 
 
 ---
 
+## Sprint 10 Unblock — closed 2026-05-07
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Xero revenue classifier (WMF/CON → rev_general) | ✅ DONE — extracted to `api/lib/xero-mapper.js`, 106 Vitest tests cover real SKU names from the Xero exports |
+| 2 | `Math.abs()` sign-flip on credits | ✅ DONE — sign preserved; credits correctly reduce revenue |
+| 3 | Cash balance matcher ("Binned-It Pty Ltd" row) | ✅ DONE — `findCashBalance()` walks Assets→Bank section by structure, not row name |
+| 4 | AR sync + per-debtor write + Older bucket | ✅ DONE — `parseAgedReceivables()` reads Cells[1..6], per-debtor INSERT, `void arData;` removed |
+| 11 | Legal-letter ABN/BSB into platform_settings | ✅ DONE — `useCompanyConfig()` hook + `legalTemplates.js` accepts `company` param + UI gate disables Send when placeholders detected |
+| 10 | Collections "Send" UX honesty | ⚠ DONE (interim) — default delivery method is "Mark as sent (manual)" with explicit warning that email/post dispatch isn't wired. Resend integration still open. |
+| 12 | Investor RBAC sandbox | ✅ DONE — `main.jsx` AuthGate redirects role=`viewer`/`investor` to `/investor` regardless of URL |
+| 20 | Wizard side-menu entry | ✅ DONE — `Load Data` (📥) added under Reports section |
+
+**Verification:** `npm run build` exits 0 errors; `npm test` 106/106 passing including the new `api/lib/xero-mapper.test.js` (99 new assertions covering every audit P0/P1 finding).
+
+**Net effect on data quality:** the six P0 reconciliation issues that made the Xero → SkipSync pipeline unreliable are now fixed at the code layer. Production behaviour will change at the next Vercel deploy + next Xero sync run. To confirm post-deploy, Meg (the Accountant agent) should run a fresh reconciliation on March 2026 data and verify rev_other / cos_other / cash_balance / debtors_monthly all reconcile against the Xero export within materiality.
+
+**Out of Sprint 10 (still open):** items #13 (COS classifier — partially addressed by the new module but full coverage of explicit tipping/disposal language), #14 (bin-type name fragmentation), #15 (loss-making detection), #16-#18 (Driver app PWA, offline queue, v0.5 → v1), #19 (JobCostingWidget orphan), #21 (Twilio SMS), #22-#23 (UX rebrand of dashboard tabs + mobile nav), and the P2/P3 backlog. See sections below for details.
+
+---
+
 ## P0 — Critical (decision-changing this period). Must fix before the next pricing review or month-end close.
 
 ### 1. Xero revenue classifier is silently dumping ~$1.0M YTD into `rev_other`
