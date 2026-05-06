@@ -615,6 +615,13 @@ export default function App() {
           currentTab={dashTab}
           alertCount={alerts_count}
           chatOpen={chatOpen}
+          dashTabs={dashTabs}
+          onTabPick={(tabId) => {
+            // Sprint 15 #23: tab picker drawer chose a tab — preserve current month
+            setDashTab(tabId);
+            navigate(`/dashboard/${tabId}?month=${selectedMonth}`);
+            setMenuOpen(false);
+          }}
           onNavigate={(s, t) => {
             if (s === 'home') navigate('/home');
             else if (s === 'dashboard' && t) navigate(`/dashboard/${t}`);
