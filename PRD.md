@@ -1,4 +1,6 @@
-# Binned-IT Dashboard Hub — Product Requirements Document
+# SkipSync — Product Requirements Document
+
+*(Written as "Binned-IT Dashboard Hub" — same product. Canonical name is now SkipSync; superseded by [PRD-v6.md](./PRD-v6.md).)*
 
 **Version:** 4.0
 **Date:** 29 March 2026

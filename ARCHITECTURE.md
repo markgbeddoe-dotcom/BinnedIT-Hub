@@ -2,7 +2,9 @@ I have now read all files and have a complete picture of the codebase. Let me no
 
 ---
 
-# Binned-IT Dashboard Hub — Architecture Decision Record
+# SkipSync — Architecture Decision Record
+
+*(Originally written as "Binned-IT Dashboard Hub". Same product — canonical name is now SkipSync.)*
 
 ## Version 1.0 | Date: 27 March 2026 | Status: Accepted
 

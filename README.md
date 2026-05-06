@@ -1,6 +1,7 @@
-# Binned-IT Dashboard Hub
+# SkipSync
 
-Management Intelligence Platform for Binned-IT Pty Ltd — skip bin hire, Seaford Melbourne.
+Operations Intelligence Platform for Binned-IT Pty Ltd — skip bin hire, Seaford Melbourne.
+*(Formerly "Binned-IT Dashboard Hub" / "Binned-IT Hub" — same product, canonical name is now SkipSync.)*
 
 **Live:** https://binnedit-hub.vercel.app
 **Stack:** React 18 + Vite · Supabase PostgreSQL + Auth · Vercel Edge Functions · TanStack Query v5 · Claude Sonnet 4.6

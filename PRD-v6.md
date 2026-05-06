@@ -1,4 +1,6 @@
-# Binned-IT Hub — Product Requirements Document v6.0
+# SkipSync — Product Requirements Document v6.0
+
+*(Written as "Binned-IT Hub". Same product — canonical name is now SkipSync.)*
 
 **Version:** 6.0
 **Date:** 27 April 2026

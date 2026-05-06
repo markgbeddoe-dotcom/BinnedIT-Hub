@@ -1,4 +1,6 @@
-# Binned-IT Hub — Product Requirements Document v5.0
+# SkipSync — Product Requirements Document v5.0
+
+*(Written as "Binned-IT Hub". Same product — canonical name is now SkipSync; superseded by [PRD-v6.md](./PRD-v6.md).)*
 
 **Version:** 5.0
 **Date:** 3 April 2026

@@ -1,7 +1,7 @@
-# Binned-IT Dashboard Hub — Claude Code Instructions
+# SkipSync — Claude Code Instructions
 
 ## Project
-React 18 + Vite SPA. Supabase PostgreSQL + Auth. Vercel deployment. TanStack Query v5. React Router v6.
+**SkipSync** (formerly "Binned-IT Dashboard Hub" / "Binned-IT Hub" — same product). React 18 + Vite SPA. Supabase PostgreSQL + Auth. Vercel deployment. TanStack Query v5. React Router v7.
 
 **Owner:** Mark Beddoe — Binned-IT Pty Ltd, skip bin hire, Seaford Melbourne.
 **Supabase project ref:** `dkjwyzjzdcgrepbgiuei`
@@ -86,5 +86,4 @@ After any significant change:
 ## Known issues / watch out for
 - Supabase 400/401 errors in console are expected until migrations applied — app falls back to hardcoded data
 - AI Chat and invite flow require `vercel dev` locally (Edge Functions don't run on `vite dev`)
-- VAPID key for push notifications is a placeholder — generate real keys with `npx web-push generate-vapid-keys` before going live
 - Chunk size warning (1,368 kB) is expected — non-blocking
