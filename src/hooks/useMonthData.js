@@ -5,16 +5,24 @@
  * All query hooks use a staleTime of 5 minutes and retry 2× on failure.
  * Mutation hooks invalidate related query caches on success so UI updates immediately.
  *
+ * Sprint 17 #17D — every read hook now accepts an optional `basis` argument
+ * ('cash' | 'accrual') as its LAST parameter. The basis is included in the
+ * query key so the cache is partitioned per-basis (no stale rows leak across
+ * the toggle), and forwarded to the corresponding `src/api/reports.js` call so
+ * the backend (sibling 17C) returns the right slice. When omitted the API
+ * defaults to cash, matching the prior behaviour.
+ *
  * Query hooks (read):
- * - useAvailableMonths()           — list of months with data in monthly_reports
- * - useFinancials(reportMonth)     — financials_monthly row for the selected month
- * - useYTDFinancials(toMonth)      — all financials_monthly rows from Jul to toMonth
- * - useBalanceSheet(reportMonth)   — balance_sheet row for the selected month
- * - useDebtors(reportMonth)        — debtor_aging rows for the selected month
- * - useBinPerformance(reportMonth) — bin_type_performance rows for the selected month
- * - useCompliance(reportMonth)     — compliance row for the selected month
- * - useAcquisitions(reportMonth)   — customer_acquisitions rows for the selected month
- * - useReport(reportMonth)         — monthly_reports row for the selected month
+ * - useAvailableMonths()                              — list of months with data in monthly_reports
+ * - useFinancials(reportMonth, basis)                 — financials_monthly row
+ * - useYTDFinancials(toMonth, basis)                  — financials_monthly Jul → toMonth
+ * - useBalanceSheet(reportMonth, basis)               — balance_sheet row
+ * - useDebtors(reportMonth, basis)                    — debtor_aging rows
+ * - useBinPerformance(reportMonth, basis)             — bin_type_performance rows
+ * - useCompliance(reportMonth, basis)                 — compliance row
+ * - useAcquisitions(reportMonth, basis)               — customer_acquisitions rows
+ * - useReport(reportMonth, basis)                     — monthly_reports row
+ * - useChurnSignals(reportMonth, basis)               — churn signals
  *
  * Mutation hooks (write — wizard and settings):
  * - useCreateReport()              — create a new monthly_reports row
@@ -55,74 +63,74 @@ export function useAvailableMonths() {
   })
 }
 
-export function useFinancials(reportMonth) {
+export function useFinancials(reportMonth, basis) {
   return useQuery({
-    queryKey: ['financials', reportMonth],
-    queryFn: () => getFinancialsForMonth(reportMonth),
+    queryKey: ['financials', reportMonth, basis],
+    queryFn: () => getFinancialsForMonth(reportMonth, basis),
     enabled: !!reportMonth,
   })
 }
 
-export function useYTDFinancials(toMonth) {
+export function useYTDFinancials(toMonth, basis) {
   return useQuery({
-    queryKey: ['financials-ytd', toMonth],
-    queryFn: () => getFinancialsRange('2025-07-01', toMonth),
+    queryKey: ['financials-ytd', toMonth, basis],
+    queryFn: () => getFinancialsRange('2025-07-01', toMonth, basis),
     enabled: !!toMonth,
   })
 }
 
-export function useBalanceSheet(reportMonth) {
+export function useBalanceSheet(reportMonth, basis) {
   return useQuery({
-    queryKey: ['balance-sheet', reportMonth],
-    queryFn: () => getBalanceSheetForMonth(reportMonth),
+    queryKey: ['balance-sheet', reportMonth, basis],
+    queryFn: () => getBalanceSheetForMonth(reportMonth, basis),
     enabled: !!reportMonth,
   })
 }
 
-export function useDebtors(reportMonth) {
+export function useDebtors(reportMonth, basis) {
   return useQuery({
-    queryKey: ['debtors', reportMonth],
-    queryFn: () => getDebtorsForMonth(reportMonth),
+    queryKey: ['debtors', reportMonth, basis],
+    queryFn: () => getDebtorsForMonth(reportMonth, basis),
     enabled: !!reportMonth,
   })
 }
 
-export function useBinPerformance(reportMonth) {
+export function useBinPerformance(reportMonth, basis) {
   return useQuery({
-    queryKey: ['bin-performance', reportMonth],
-    queryFn: () => getBinPerformanceForMonth(reportMonth),
+    queryKey: ['bin-performance', reportMonth, basis],
+    queryFn: () => getBinPerformanceForMonth(reportMonth, basis),
     enabled: !!reportMonth,
   })
 }
 
-export function useCompliance(reportMonth) {
+export function useCompliance(reportMonth, basis) {
   return useQuery({
-    queryKey: ['compliance', reportMonth],
-    queryFn: () => getComplianceForMonth(reportMonth),
+    queryKey: ['compliance', reportMonth, basis],
+    queryFn: () => getComplianceForMonth(reportMonth, basis),
     enabled: !!reportMonth,
   })
 }
 
-export function useAcquisitions(reportMonth) {
+export function useAcquisitions(reportMonth, basis) {
   return useQuery({
-    queryKey: ['acquisitions', reportMonth],
-    queryFn: () => getCustomerAcquisitionsForMonth(reportMonth),
+    queryKey: ['acquisitions', reportMonth, basis],
+    queryFn: () => getCustomerAcquisitionsForMonth(reportMonth, basis),
     enabled: !!reportMonth,
   })
 }
 
-export function useReport(reportMonth) {
+export function useReport(reportMonth, basis) {
   return useQuery({
-    queryKey: ['report', reportMonth],
-    queryFn: () => getReportForMonth(reportMonth),
+    queryKey: ['report', reportMonth, basis],
+    queryFn: () => getReportForMonth(reportMonth, basis),
     enabled: !!reportMonth,
   })
 }
 
-export function useChurnSignals(reportMonth) {
+export function useChurnSignals(reportMonth, basis) {
   return useQuery({
-    queryKey: ['churn-signals', reportMonth],
-    queryFn: () => getChurnSignals(reportMonth),
+    queryKey: ['churn-signals', reportMonth, basis],
+    queryFn: () => getChurnSignals(reportMonth, basis),
     enabled: !!reportMonth,
     staleTime: 5 * 60 * 1000,
   })

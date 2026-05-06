@@ -43,6 +43,7 @@ import NotificationBell from './components/NotificationBell';
 
 // React Query hooks
 import { useAvailableMonths } from './hooks/useMonthData';
+import { useAccountingBasis } from './hooks/useAccountingBasis';
 import { useBreakpoint } from './hooks/useBreakpoint';
 import { useAuth } from './context/AuthContext';
 import { createReport, upsertFinancials, upsertCompliance } from './api/reports';
@@ -127,6 +128,10 @@ export default function App() {
   const { isMobile } = useBreakpoint();
   const { profile, isOwner } = useAuth();
   const greetingName = profile?.full_name?.split(' ')[0] || 'there';
+
+  // Sprint 17 #17D — accounting basis toggle (cash | accrual). Investor/viewer
+  // is locked to cash per CFO recommendation; owner/manager/bookkeeper choose.
+  const { basis, setBasis, locked: basisLocked } = useAccountingBasis();
 
   // React Query: available months from Supabase with fallback
   const { data: supabaseMonths } = useAvailableMonths();
@@ -283,6 +288,59 @@ export default function App() {
   };
 
   // ===== HEADER =====
+  // Sprint 17 #17D — segmented basis toggle. Two buttons (~140px wide on
+  // desktop, compact ~104px on mobile). Active option is yellow on black,
+  // inactive is muted grey. Disabled state when investor/viewer is locked to
+  // cash; tooltip explains the CFO rationale.
+  const BasisToggle = () => {
+    const w = isMobile ? 52 : 70;          // half of 104 / 140
+    const lockedTitle = 'Investor view is fixed to cash basis per CFO recommendation';
+    const optStyle = (active) => ({
+      width: w,
+      background: active ? B.yellow : 'transparent',
+      color: active ? '#0A0A0A' : (basisLocked ? '#555' : '#bbb'),
+      border: 'none',
+      padding: isMobile ? '4px 0' : '5px 0',
+      fontFamily: fontHead,
+      fontSize: isMobile ? 10 : 11,
+      fontWeight: active ? 700 : 600,
+      letterSpacing: '0.06em',
+      textTransform: 'uppercase',
+      cursor: basisLocked ? 'not-allowed' : 'pointer',
+      opacity: basisLocked && !active ? 0.55 : 1,
+      transition: 'background 0.15s, color 0.15s',
+    });
+    return (
+      <div
+        title={basisLocked ? lockedTitle : undefined}
+        aria-label="Accounting basis"
+        style={{
+          display: 'inline-flex',
+          background: '#222',
+          border: '1px solid #555',
+          borderRadius: 6,
+          overflow: 'hidden',
+          opacity: basisLocked ? 0.85 : 1,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setBasis('cash')}
+          disabled={basisLocked}
+          aria-pressed={basis === 'cash'}
+          style={optStyle(basis === 'cash')}
+        >Cash</button>
+        <button
+          type="button"
+          onClick={() => setBasis('accrual')}
+          disabled={basisLocked}
+          aria-pressed={basis === 'accrual'}
+          style={optStyle(basis === 'accrual')}
+        >Accrual</button>
+      </div>
+    );
+  };
+
   const Header = () => (
     <div style={{background:'#000',borderBottom:`3px solid ${B.yellow}`,
       padding: isMobile ? '8px 12px' : '12px 24px',
@@ -304,6 +362,7 @@ export default function App() {
           </select>
         </div>
       )}
+      {currentScreen==='dashboard' && <BasisToggle />}
       {currentScreen==='dashboard' && !isMobile && (
         <PDFExport monthLabel={selLabel} />
       )}
@@ -385,7 +444,9 @@ export default function App() {
     };
 
     const tabAlerts = alerts[dashTab === 'benchmarking' ? 'pricing' : dashTab] || [];
-    const tabProps = { selectedMonth, monthCount, monthLabel: selLabel, reportId, reportMonth };
+    // Sprint 17 #17D — pass basis through to every tab so their hooks (sibling
+    // 17C wires the actual fetch) refetch when the toggle flips.
+    const tabProps = { selectedMonth, monthCount, monthLabel: selLabel, reportId, reportMonth, basis };
 
     return (
       <div style={{maxWidth:1100,margin:'0 auto',padding:'20px 24px'}}>
@@ -407,16 +468,41 @@ export default function App() {
         {/* Tab Bar — hidden on mobile (use MobileNav instead).
             Sprint 11 #22: dropped uppercase styling so the new plain-English labels
             (Overview, Sales, Profit, ...) read naturally. */}
-        <div style={{display:isMobile?'none':'flex',gap:2,overflowX:'auto',marginBottom:20,paddingBottom:2}} className="no-print">
-          {dashTabs.map(t=>(
-            <button key={t.id} onClick={()=>handleTabChange(t.id)} style={{
-              background:dashTab===t.id?B.yellow:'transparent',color:dashTab===t.id?'#0A0A0A':B.textMuted,
-              border:'none',padding:'8px 14px',borderRadius:'8px 8px 0 0',cursor:'pointer',
-              fontFamily:fontHead,fontSize:13,fontWeight:dashTab===t.id?700:500,
-              whiteSpace:'nowrap',transition:'all 0.15s',borderBottom:dashTab===t.id?`2px solid ${B.yellow}`:'2px solid transparent'
-            }}>{t.label}</button>
-          ))}
+        <div style={{display:isMobile?'none':'flex',gap:2,overflowX:'auto',marginBottom:20,paddingBottom:2,alignItems:'center'}} className="no-print">
+          {dashTabs.map(t=>{
+            const active = dashTab === t.id;
+            return (
+              <button key={t.id} onClick={()=>handleTabChange(t.id)} style={{
+                background:active?B.yellow:'transparent',color:active?'#0A0A0A':B.textMuted,
+                border:'none',padding:'8px 14px',borderRadius:'8px 8px 0 0',cursor:'pointer',
+                fontFamily:fontHead,fontSize:13,fontWeight:active?700:500,
+                whiteSpace:'nowrap',transition:'all 0.15s',borderBottom:active?`2px solid ${B.yellow}`:'2px solid transparent',
+                display:'inline-flex',alignItems:'center',gap:8
+              }}>
+                <span>{t.label}</span>
+                {/* Sprint 17 #17D — small "(accrual basis)" pill on the active tab so
+                    the user knows they've switched off the cash default. */}
+                {active && basis === 'accrual' && (
+                  <span style={{
+                    background:'#0A0A0A',color:B.yellow,fontFamily:fontHead,fontSize:9,fontWeight:700,
+                    letterSpacing:'0.06em',textTransform:'uppercase',padding:'2px 6px',borderRadius:10,lineHeight:1
+                  }}>Accrual basis</span>
+                )}
+              </button>
+            );
+          })}
         </div>
+        {/* Mobile: surface the accrual pill below the month selector — the
+            tab bar isn't visible (MobileNav owns navigation), so show it here
+            so the user is reminded they're off the cash default. */}
+        {isMobile && basis === 'accrual' && (
+          <div style={{marginBottom:12,display:'flex',justifyContent:'center'}} className="no-print">
+            <span style={{
+              background:B.yellow,color:'#0A0A0A',fontFamily:fontHead,fontSize:10,fontWeight:700,
+              letterSpacing:'0.08em',textTransform:'uppercase',padding:'4px 10px',borderRadius:12,lineHeight:1
+            }}>Accrual basis</span>
+          </div>
+        )}
 
         <ErrorBoundary key={dashTab}>
           {dashTab === 'snapshot'      && <SnapshotTab      {...tabProps} />}
