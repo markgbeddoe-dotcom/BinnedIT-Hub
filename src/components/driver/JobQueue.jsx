@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { B, fontHead, fontBody } from '../../theme'
 import { getTodayJobs } from '../../api/driver'
 import JobCard from './JobCard'
+import { ACTIVE_STATUSES } from './jobStateMachine'
 
 const CACHE_KEY = 'skipsync_driver_jobs_cache'
 
@@ -24,7 +25,7 @@ function cacheJobs(jobs) {
   } catch {}
 }
 
-export default function JobQueue({ driverId, onOpenChecklist }) {
+export default function JobQueue({ driverId, checklistDone = false, onOpenChecklist }) {
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [online, setOnline] = useState(navigator.onLine)
@@ -66,7 +67,7 @@ export default function JobQueue({ driverId, onOpenChecklist }) {
     setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: newStatus } : j))
   }
 
-  const activeJobs    = jobs.filter(j => !['completed','cancelled'].includes(j.status))
+  const activeJobs    = jobs.filter(j => ACTIVE_STATUSES.includes(j.status))
   const completedJobs = jobs.filter(j => j.status === 'completed')
   const displayJobs   = filter === 'active' ? activeJobs : jobs
 
@@ -203,7 +204,9 @@ export default function JobQueue({ driverId, onOpenChecklist }) {
             key={job.id}
             job={job}
             driverId={driverId}
+            checklistDone={checklistDone}
             onStatusChange={handleStatusChange}
+            onOpenChecklist={onOpenChecklist}
           />
         ))
       )}

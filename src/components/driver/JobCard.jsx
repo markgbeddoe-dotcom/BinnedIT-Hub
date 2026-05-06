@@ -1,25 +1,19 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { B, fontHead, fontBody } from '../../theme'
-import { recordJobEvent, updateJobStatus, uploadJobPhoto } from '../../api/driver'
+import { recordJobEvent, updateJobStatus, uploadJobPhoto, hasDeliveryPhoto } from '../../api/driver'
 import PhotoCapture from './PhotoCapture'
 import HazardReport from './HazardReport'
+import { nextAllowedActions, isActionAllowed, STATUS_LABEL } from './jobStateMachine'
 
 const STATUS_COLOR = {
   pending:     B.textMuted,
   confirmed:   B.blue,
   scheduled:   B.amber,
+  en_route:    B.blue,
+  arrived:     B.amber,
   in_progress: B.yellow,
   completed:   B.green,
   cancelled:   B.red,
-}
-
-const STATUS_LABEL = {
-  pending:     'Pending',
-  confirmed:   'Confirmed',
-  scheduled:   'Scheduled',
-  in_progress: 'In Progress',
-  completed:   'Completed',
-  cancelled:   'Cancelled',
 }
 
 function getGPS() {
@@ -33,18 +27,94 @@ function getGPS() {
   })
 }
 
-export default function JobCard({ job, driverId, onStatusChange }) {
+export default function JobCard({ job, driverId, checklistDone = false, onStatusChange, onOpenChecklist }) {
   const [expanded, setExpanded] = useState(false)
-  const [actionLoading, setActionLoading] = useState(null) // 'start' | 'complete' | null
-  const [photoType, setPhotoType] = useState(null) // open photo capture modal
+  const [actionLoading, setActionLoading] = useState(null) // 'depart' | 'arrive' | 'start' | 'complete' | null
+  const [photoType, setPhotoType] = useState(null)
   const [photoUploading, setPhotoUploading] = useState(false)
   const [showHazard, setShowHazard] = useState(false)
   const [localStatus, setLocalStatus] = useState(job.status)
   const [feedback, setFeedback] = useState('')
+  const [deliveryPhotoTaken, setDeliveryPhotoTaken] = useState(false)
 
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
     [job.address, job.suburb, job.postcode].filter(Boolean).join(', ')
   )}`
+
+  // On mount / status change, ask Supabase whether this job already
+  // has a delivery photo (covers the case where it was uploaded in a
+  // previous session). Failure is treated as "no photo" — fail-closed.
+  useEffect(() => {
+    let cancelled = false
+    if (localStatus === 'in_progress' || localStatus === 'arrived') {
+      hasDeliveryPhoto(job.id)
+        .then(present => { if (!cancelled && present) setDeliveryPhotoTaken(true) })
+        .catch(() => {})
+    }
+    return () => { cancelled = true }
+  }, [job.id, localStatus])
+
+  // Gates derived from state machine
+  const gateOpts = { hasDeliveryPhoto: deliveryPhotoTaken, checklistDoneToday: checklistDone }
+  const actions = nextAllowedActions(localStatus, gateOpts)
+  const departAction   = actions.find(a => a.target === 'en_route')
+  const arriveAction   = actions.find(a => a.target === 'arrived')
+  const startAction    = actions.find(a => a.target === 'in_progress')
+  const completeAction = actions.find(a => a.target === 'completed')
+
+  async function handleDepart() {
+    setActionLoading('depart')
+    setFeedback('')
+    try {
+      const gps = await getGPS()
+      await updateJobStatus(job.id, 'en_route')
+      await recordJobEvent({
+        bookingId: job.id,
+        eventType: 'departed',
+        driverId,
+        lat: gps?.lat,
+        lng: gps?.lng,
+        accuracyM: gps?.accuracyM,
+      })
+      setLocalStatus('en_route')
+      onStatusChange?.(job.id, 'en_route')
+      setFeedback('✓ En route')
+    } catch (err) {
+      setFeedback('Failed to update — check connection')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleArrive() {
+    // Hard gate: checklist must be done before arriving on site.
+    if (!isActionAllowed(localStatus, 'arrived', gateOpts)) {
+      setFeedback('Complete the pre-start vehicle checklist first')
+      onOpenChecklist?.()
+      return
+    }
+    setActionLoading('arrive')
+    setFeedback('')
+    try {
+      const gps = await getGPS()
+      await updateJobStatus(job.id, 'arrived')
+      await recordJobEvent({
+        bookingId: job.id,
+        eventType: 'arrived',
+        driverId,
+        lat: gps?.lat,
+        lng: gps?.lng,
+        accuracyM: gps?.accuracyM,
+      })
+      setLocalStatus('arrived')
+      onStatusChange?.(job.id, 'arrived')
+      setFeedback('✓ Marked arrived')
+    } catch (err) {
+      setFeedback('Failed to mark arrived — check connection')
+    } finally {
+      setActionLoading(null)
+    }
+  }
 
   async function handleStart() {
     setActionLoading('start')
@@ -71,6 +141,12 @@ export default function JobCard({ job, driverId, onStatusChange }) {
   }
 
   async function handleComplete() {
+    // Hard gate: must have a delivery photo before completion.
+    if (!isActionAllowed(localStatus, 'completed', gateOpts)) {
+      setFeedback('Take a delivery photo before completing')
+      setPhotoType('delivery')
+      return
+    }
     setActionLoading('complete')
     setFeedback('')
     try {
@@ -104,6 +180,7 @@ export default function JobCard({ job, driverId, onStatusChange }) {
         uploadedBy: driverId,
       })
       setFeedback(`✓ ${photoType} photo saved`)
+      if (photoType === 'delivery') setDeliveryPhotoTaken(true)
       setPhotoType(null)
     } catch (err) {
       setFeedback('Photo upload failed — saved locally')
@@ -115,13 +192,23 @@ export default function JobCard({ job, driverId, onStatusChange }) {
 
   const isCompleted = localStatus === 'completed'
   const isInProgress = localStatus === 'in_progress'
+  const isArrived = localStatus === 'arrived'
+  const isEnRoute = localStatus === 'en_route'
   const statusColor = STATUS_COLOR[localStatus] || B.textMuted
+
+  // Pick the border colour to reflect the current operational phase.
+  const borderColor =
+    isCompleted ? B.green :
+    isInProgress ? B.yellow :
+    isArrived ? B.amber :
+    isEnRoute ? B.blue :
+    '#333'
 
   return (
     <>
       <div style={{
         background: isCompleted ? '#0F2B1A' : '#1A1A2E',
-        border: `2px solid ${isInProgress ? B.yellow : isCompleted ? B.green : '#333'}`,
+        border: `2px solid ${borderColor}`,
         borderRadius: 12,
         marginBottom: 12,
         overflow: 'hidden',
@@ -213,15 +300,73 @@ export default function JobCard({ job, driverId, onStatusChange }) {
               📍 Navigate
             </a>
 
-            {/* Action buttons */}
+            {/* Action buttons — driven by state machine */}
             {!isCompleted && (
-              <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                {localStatus !== 'in_progress' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+                {/* Depart (pending/confirmed/scheduled → en_route) */}
+                {departAction && (
+                  <button
+                    onClick={handleDepart}
+                    disabled={!!actionLoading}
+                    style={{
+                      width: '100%', padding: '18px',
+                      background: actionLoading === 'depart' ? '#888' : B.blue,
+                      color: B.white, border: 'none', borderRadius: 8,
+                      fontSize: 18, fontFamily: fontHead, fontWeight: 700,
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                      cursor: actionLoading ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {actionLoading === 'depart' ? '…' : '🚚 Start Drive (En Route)'}
+                  </button>
+                )}
+
+                {/* Mark Arrived (en_route → arrived) — gated by checklist */}
+                {arriveAction && (
+                  <>
+                    <button
+                      onClick={handleArrive}
+                      disabled={!!actionLoading || arriveAction.blocked}
+                      style={{
+                        width: '100%', padding: '18px',
+                        background: arriveAction.blocked ? '#444' : (actionLoading === 'arrive' ? '#888' : B.amber),
+                        color: arriveAction.blocked ? '#888' : B.black,
+                        border: 'none', borderRadius: 8,
+                        fontSize: 18, fontFamily: fontHead, fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: '0.06em',
+                        cursor: (actionLoading || arriveAction.blocked) ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {actionLoading === 'arrive' ? '…' : '📍 Mark Arrived'}
+                    </button>
+                    {arriveAction.blocked && (
+                      <div
+                        onClick={onOpenChecklist}
+                        style={{
+                          background: '#2B1A0F',
+                          border: `1px solid ${B.amber}`,
+                          borderRadius: 8,
+                          padding: '10px 14px',
+                          color: B.amber,
+                          fontSize: 13,
+                          cursor: onOpenChecklist ? 'pointer' : 'default',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        }}
+                      >
+                        <span>⚠ {arriveAction.reason}</span>
+                        {onOpenChecklist && <span style={{ fontSize: 18 }}>›</span>}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Start Job (arrived → in_progress) */}
+                {startAction && (
                   <button
                     onClick={handleStart}
                     disabled={!!actionLoading}
                     style={{
-                      flex: 1, padding: '18px',
+                      width: '100%', padding: '18px',
                       background: actionLoading === 'start' ? '#888' : B.yellow,
                       color: B.black, border: 'none', borderRadius: 8,
                       fontSize: 18, fontFamily: fontHead, fontWeight: 700,
@@ -231,21 +376,45 @@ export default function JobCard({ job, driverId, onStatusChange }) {
                   >
                     {actionLoading === 'start' ? '…' : '▶ Start Job'}
                   </button>
-                ) : (
-                  <button
-                    onClick={handleComplete}
-                    disabled={!!actionLoading}
-                    style={{
-                      flex: 1, padding: '18px',
-                      background: actionLoading === 'complete' ? '#888' : B.green,
-                      color: B.white, border: 'none', borderRadius: 8,
-                      fontSize: 18, fontFamily: fontHead, fontWeight: 700,
-                      textTransform: 'uppercase', letterSpacing: '0.06em',
-                      cursor: actionLoading ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {actionLoading === 'complete' ? '…' : '✓ Complete Job'}
-                  </button>
+                )}
+
+                {/* Complete (in_progress → completed) — gated by delivery photo */}
+                {completeAction && (
+                  <>
+                    <button
+                      onClick={handleComplete}
+                      disabled={!!actionLoading || completeAction.blocked}
+                      style={{
+                        width: '100%', padding: '18px',
+                        background: completeAction.blocked ? '#444' : (actionLoading === 'complete' ? '#888' : B.green),
+                        color: completeAction.blocked ? '#888' : B.white,
+                        border: 'none', borderRadius: 8,
+                        fontSize: 18, fontFamily: fontHead, fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: '0.06em',
+                        cursor: (actionLoading || completeAction.blocked) ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {actionLoading === 'complete' ? '…' : '✓ Mark Complete'}
+                    </button>
+                    {completeAction.blocked && (
+                      <div
+                        onClick={() => setPhotoType('delivery')}
+                        style={{
+                          background: '#2B1A0F',
+                          border: `1px solid ${B.amber}`,
+                          borderRadius: 8,
+                          padding: '10px 14px',
+                          color: B.amber,
+                          fontSize: 13,
+                          cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        }}
+                      >
+                        <span>📸 Take a delivery photo before completing</span>
+                        <span style={{ fontSize: 18 }}>›</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -256,23 +425,33 @@ export default function JobCard({ job, driverId, onStatusChange }) {
                 { type: 'delivery',   label: 'Delivery\nPhoto',    icon: '🚛' },
                 { type: 'collection', label: 'Collection\nPhoto',  icon: '🔄' },
                 { type: 'tip_docket', label: 'Tip Docket\nPhoto',  icon: '🧾' },
-              ].map(({ type, label, icon }) => (
-                <button
-                  key={type}
-                  onClick={() => setPhotoType(type)}
-                  style={{
-                    padding: '14px 8px',
-                    background: '#0D0D1A',
-                    border: '1px solid #444',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                  }}
-                >
-                  <div style={{ fontSize: 24 }}>{icon}</div>
-                  <div style={{ color: '#aaa', fontSize: 11, marginTop: 4, whiteSpace: 'pre-line', lineHeight: 1.3 }}>{label}</div>
-                </button>
-              ))}
+              ].map(({ type, label, icon }) => {
+                const taken = type === 'delivery' && deliveryPhotoTaken
+                return (
+                  <button
+                    key={type}
+                    onClick={() => setPhotoType(type)}
+                    style={{
+                      padding: '14px 8px',
+                      background: taken ? '#0F2B1A' : '#0D0D1A',
+                      border: `1px solid ${taken ? B.green : '#444'}`,
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      position: 'relative',
+                    }}
+                  >
+                    <div style={{ fontSize: 24 }}>{taken ? '✅' : icon}</div>
+                    <div style={{
+                      color: taken ? B.green : '#aaa',
+                      fontSize: 11, marginTop: 4,
+                      whiteSpace: 'pre-line', lineHeight: 1.3,
+                    }}>
+                      {label}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
 
             {/* Hazard report */}

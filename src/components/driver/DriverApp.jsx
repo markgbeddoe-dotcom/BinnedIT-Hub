@@ -157,6 +157,7 @@ export default function DriverApp() {
       <div style={{ padding: '16px', paddingBottom: 32, maxWidth: 520, margin: '0 auto' }}>
         <JobQueue
           driverId={session.user.id}
+          checklistDone={checklistDone}
           onOpenChecklist={() => setScreen('checklist')}
         />
       </div>

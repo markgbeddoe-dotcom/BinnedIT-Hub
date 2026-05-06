@@ -1,5 +1,13 @@
 import { supabase } from '../lib/supabase'
 
+// Active driver-queue statuses — drivers should see jobs in any of
+// these states. Includes the v1 state-machine additions (en_route,
+// arrived) plus legacy values still in flight.
+const ACTIVE_DRIVER_STATUSES = [
+  'pending', 'confirmed', 'scheduled',
+  'en_route', 'arrived', 'in_progress',
+]
+
 /** Fetch today's jobs for a driver (or all scheduled jobs for today) */
 export async function getTodayJobs(driverId = null) {
   const today = new Date().toISOString().slice(0, 10)
@@ -7,7 +15,7 @@ export async function getTodayJobs(driverId = null) {
     .from('bookings')
     .select('*')
     .eq('scheduled_date', today)
-    .in('status', ['scheduled', 'in_progress', 'confirmed'])
+    .in('status', ACTIVE_DRIVER_STATUSES)
     .order('scheduled_date', { ascending: true })
 
   if (driverId) {
@@ -27,7 +35,7 @@ export async function getDriverJobs(driverId) {
     .select('*')
     .or(`driver_id.eq.${driverId},driver_name_assigned.is.null`)
     .gte('scheduled_date', today)
-    .in('status', ['scheduled', 'in_progress', 'confirmed', 'pending'])
+    .in('status', ACTIVE_DRIVER_STATUSES)
     .order('scheduled_date', { ascending: true })
     .limit(20)
 
@@ -129,6 +137,26 @@ export async function getJobPhotos(bookingId) {
 
   if (error) throw error
   return data || []
+}
+
+/**
+ * Check whether a booking has at least one delivery photo.
+ * Used by JobCard to gate the "Mark Complete" button.
+ * Returns false on any error (fail-closed — driver must take a photo).
+ */
+export async function hasDeliveryPhoto(bookingId) {
+  try {
+    const { data, error } = await supabase
+      .from('job_photos')
+      .select('id')
+      .eq('booking_id', bookingId)
+      .eq('photo_type', 'delivery')
+      .limit(1)
+    if (error) return false
+    return (data || []).length > 0
+  } catch {
+    return false
+  }
 }
 
 /** Submit vehicle pre-start checklist */
