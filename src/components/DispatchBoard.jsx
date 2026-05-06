@@ -1,8 +1,29 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { fontHead, fontBody } from '../theme';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import { useBookings, useUpdateBookingStatus, useCreateBooking } from '../hooks/useBookings';
+import JobCostingWidget from './driver/JobCostingWidget';
+
+// Persist the "Show job costing on cards" toggle locally. Defaults OFF
+// (audit P0-8 requirement: opt-in to avoid first-time visual noise).
+const COSTING_TOGGLE_KEY = 'skipsync.dispatch.showJobCosting';
+
+function readCostingToggle() {
+  try {
+    return localStorage.getItem(COSTING_TOGGLE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeCostingToggle(v) {
+  try {
+    localStorage.setItem(COSTING_TOGGLE_KEY, v ? 'true' : 'false');
+  } catch {
+    /* localStorage unavailable (private browsing) — toggle is session-only */
+  }
+}
 
 // ─── Dark dispatch theme ──────────────────────────────────────────────────────
 const D = {
@@ -49,7 +70,7 @@ function fmtCost(v) {
 }
 
 // ─── Job Card ─────────────────────────────────────────────────────────────────
-function JobCard({ job, index, expandedId, onExpand }) {
+function JobCard({ job, index, expandedId, onExpand, showJobCosting }) {
   const isExpanded = expandedId === job.id;
   const colColor = COLUMNS.find(c => c.id === job.status)?.color || '#999';
   const wasteColor = WASTE_COLORS[job.waste_type] || '#8B6EB5';
@@ -143,6 +164,14 @@ function JobCard({ job, index, expandedId, onExpand }) {
                   📝 {job.notes}
                 </div>
               )}
+
+              {/* Live job costing — opt-in via the "Show job costing" toggle (audit P0-8) */}
+              {showJobCosting && (
+                <div style={{ marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
+                  <JobCostingWidget booking={job} compact />
+                </div>
+              )}
+
               <div style={{ fontSize: 10, color: D.textMuted, marginTop: 8 }}>
                 Click card to collapse
               </div>
@@ -155,7 +184,7 @@ function JobCard({ job, index, expandedId, onExpand }) {
 }
 
 // ─── Column ───────────────────────────────────────────────────────────────────
-function KanbanColumn({ column, jobs, expandedId, onExpand }) {
+function KanbanColumn({ column, jobs, expandedId, onExpand, showJobCosting }) {
   return (
     <div style={{ flex: '1 1 240px', minWidth: 220, maxWidth: 320 }}>
       {/* Header */}
@@ -205,6 +234,7 @@ function KanbanColumn({ column, jobs, expandedId, onExpand }) {
                 index={index}
                 expandedId={expandedId}
                 onExpand={onExpand}
+                showJobCosting={showJobCosting}
               />
             ))}
             {provided.placeholder}
@@ -297,6 +327,10 @@ export default function DispatchBoard() {
   const [filterDriver, setFilterDriver]     = useState('');
   const [showNewJob, setShowNewJob]         = useState(false);
   const [localJobs, setLocalJobs]           = useState(null);
+  // Audit P0-8: opt-in "Show job costing on cards" — defaults OFF for first-time users.
+  const [showJobCosting, setShowJobCosting] = useState(() => readCostingToggle());
+
+  useEffect(() => { writeCostingToggle(showJobCosting); }, [showJobCosting]);
 
   const { data: supabaseJobs, isLoading, isError } = useBookings();
   const updateStatus    = useUpdateBookingStatus();
@@ -438,6 +472,18 @@ export default function DispatchBoard() {
               Clear
             </button>
           )}
+          <label
+            title="Show revenue / cost-so-far / margin inside each expanded job card. PRD-v6 §1: live job costing per job."
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: D.textMuted, fontFamily: fontHead, textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer', userSelect: 'none' }}
+          >
+            <input
+              type="checkbox"
+              checked={showJobCosting}
+              onChange={e => setShowJobCosting(e.target.checked)}
+              style={{ cursor: 'pointer', accentColor: D.accent }}
+            />
+            Show job costing on cards
+          </label>
           {isLoading && <span style={{ fontSize: 11, color: D.textMuted }}>Loading jobs…</span>}
           {isError && <span style={{ fontSize: 11, color: '#C96B6B' }}>⚠ Could not load from database — showing sample data</span>}
           {!isLoading && isUsingSamples && !isError && (
@@ -461,6 +507,7 @@ export default function DispatchBoard() {
               jobs={columnJobs[col.id]}
               expandedId={expandedId}
               onExpand={handleExpand}
+              showJobCosting={showJobCosting}
             />
           ))}
         </div>
