@@ -84,7 +84,17 @@ function transformSupabaseRates(rows) {
   return Object.values(map);
 }
 
-export default function CompetitorPage({ onBack }) {
+/**
+ * Sprint 16 #36 — `embedded` prop. The dashboard's Competitors tab used to be a
+ * separate `CompetitorsTab` component that duplicated this UI. It now renders
+ * `<CompetitorPage embedded />` so there's a single implementation. When
+ * `embedded` is true we suppress the page-level chrome (the "Competitor
+ * Pricing Matrix" heading + Back button + the wider top padding) because the
+ * Dashboard already provides its own tab strip and breadcrumbs around it.
+ * Default `embedded={false}` keeps any future standalone /competitors usage
+ * untouched.
+ */
+export default function CompetitorPage({ onBack, embedded = false }) {
   const { isMobile } = useBreakpoint();
   const { data: supabaseRates, isLoading, isError } = useCompetitorRates();
   const upsertRate = useUpsertRate();
@@ -205,25 +215,36 @@ export default function CompetitorPage({ onBack }) {
     `Industry context: Residential and commercial skip bin hire. Products include general waste, asbestos, contaminated soil, green waste. Highly price-sensitive residential market, less so for commercial/regulated waste (asbestos, soil).`,
   ].join('\n');
 
+  // Sprint 16 #36: in embedded mode the dashboard owns the outer width/padding
+  // and tab heading, so we collapse our own page-shell padding and skip the
+  // standalone heading row entirely below.
+  const wrapperStyle = embedded
+    ? {width:'100%'}
+    : {maxWidth:1200,margin:'0 auto',padding: isMobile ? '16px 12px' : '20px 24px'};
+
   if (isLoading) {
     return (
-      <div style={{maxWidth:1200,margin:'0 auto',padding:'20px 24px'}}>
+      <div style={wrapperStyle}>
         <div style={{color:B.textMuted,fontSize:13,padding:'40px 0',textAlign:'center'}}>Loading competitor rates...</div>
       </div>
     );
   }
 
   return (
-    <div style={{maxWidth:1200,margin:'0 auto',padding: isMobile ? '16px 12px' : '20px 24px'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20,flexWrap:'wrap',gap:10}}>
-        <div>
-          <h2 style={{fontSize: isMobile ? 18 : 22,fontWeight:800,color:B.textPrimary,margin:0,fontFamily:fontHead,textTransform:'uppercase'}}>Competitor Pricing Matrix</h2>
-          <p style={{fontSize:13,color:B.textSecondary,margin:'4px 0 0'}}>
-            Click any cell to enter or update a rate — {useSupabase ? 'saves to Supabase' : 'saves locally'}
-          </p>
+    <div style={wrapperStyle}>
+      {!embedded && (
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20,flexWrap:'wrap',gap:10}}>
+          <div>
+            <h2 style={{fontSize: isMobile ? 18 : 22,fontWeight:800,color:B.textPrimary,margin:0,fontFamily:fontHead,textTransform:'uppercase'}}>Competitor Pricing Matrix</h2>
+            <p style={{fontSize:13,color:B.textSecondary,margin:'4px 0 0'}}>
+              Click any cell to enter or update a rate — {useSupabase ? 'saves to Supabase' : 'saves locally'}
+            </p>
+          </div>
+          {onBack && (
+            <button onClick={onBack} style={{background:B.cardBg,border:`1px solid ${B.cardBorder}`,color:B.textPrimary,padding:'8px 20px',borderRadius:6,cursor:'pointer',fontFamily:fontHead,fontSize:12,textTransform:'uppercase',flexShrink:0}}>← Back</button>
+          )}
         </div>
-        <button onClick={onBack} style={{background:B.cardBg,border:`1px solid ${B.cardBorder}`,color:B.textPrimary,padding:'8px 20px',borderRadius:6,cursor:'pointer',fontFamily:fontHead,fontSize:12,textTransform:'uppercase',flexShrink:0}}>← Back</button>
-      </div>
+      )}
 
       {isError && (
         <div style={{background:`${B.amber}15`,border:`1px solid ${B.amber}40`,borderRadius:8,padding:'8px 14px',marginBottom:16,fontSize:12,color:B.amber}}>
