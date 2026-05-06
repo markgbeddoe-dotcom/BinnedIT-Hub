@@ -844,3 +844,106 @@ describe('parsePLSections', () => {
     expect(parsePLSections({})).toEqual({})
   })
 })
+
+// ── Sprint 17 #17E — basis flag flow-through (cash vs accrual) ──────────────
+//
+// Companion documents:
+//   - docs/audits/2026-05-07-cash-accrual-uat.md (persona UAT plan)
+//   - e2e/cash-accrual-toggle.spec.js (Playwright assertions)
+//
+// The Sprint 10 reconciliation regression that this section guards:
+// historically, /api/xero-sync hit the Xero accrual P&L by default and wrote
+// the accrual net_profit ($30,511.71 for Feb 2026) into financials_monthly.
+// Mark, who reads the dashboard as cash, was looking at an accrual figure
+// without realising it. Sibling 17C (xero-sync.js + xero-mapper.js) is
+// changing the default to cash and adding a basis option so the basis is
+// recorded explicitly on every row.
+//
+// The fixtures below are constructed so that:
+//   - the CASH section input produces net_profit === -17638.72
+//   - the ACCRUAL section input produces net_profit === 30511.71
+// matching the canonical UAT values. These are derived from the Feb 2026
+// cash-vs-accrual P&L delta (accrual revenue includes ~$48k of unpaid
+// invoiced revenue that cash does not).
+
+describe('mapPLToFinancials — basis flag flows through (Sprint 17E reconciliation)', () => {
+  // Construct minimal fixtures that produce the canonical Feb 2026 net profit
+  // values. The shape is intentionally simple: one revenue row + one COS row +
+  // one opex row, with amounts arithmetically sized to the target net profit.
+  //
+  // Cash basis: Revenue $100,000 - COS $40,000 - Opex $77,638.72 = -$17,638.72
+  // Accrual:    Revenue $148,150.43 - COS $40,000 - Opex $77,638.72 = $30,511.71
+  //
+  // Δ revenue = $48,150.43 = the AR-side accrual recognition that the cash
+  // basis omits. This reproduces the documented swing exactly.
+
+  const cashSections = {
+    'trading income': {
+      _total: 0,
+      _rows: [{ name: 'WMF - 6m Heavy', amount: 100000 }],
+    },
+    'cost of sales': {
+      _total: 0,
+      _rows: [{ name: 'Tipping by Bin - General Waste', amount: 40000 }],
+    },
+    'operating expenses': {
+      _total: 0,
+      _rows: [{ name: 'Wages and Salaries', amount: 77638.72 }],
+    },
+  }
+
+  const accrualSections = {
+    'trading income': {
+      _total: 0,
+      _rows: [{ name: 'WMF - 6m Heavy', amount: 148150.43 }],
+    },
+    'cost of sales': {
+      _total: 0,
+      _rows: [{ name: 'Tipping by Bin - General Waste', amount: 40000 }],
+    },
+    'operating expenses': {
+      _total: 0,
+      _rows: [{ name: 'Wages and Salaries', amount: 77638.72 }],
+    },
+  }
+
+  it('cash-basis fixture produces net_profit of -$17,638.72 (Feb 2026 canonical)', () => {
+    const result = mapPLToFinancials(cashSections, '2026-02')
+    // Cash net profit MUST be -17638.72 — this is the value sibling 17C is
+    // ensuring gets written to financials_monthly when basis defaults to cash.
+    expect(result.net_profit).toBeCloseTo(-17638.72, 2)
+  })
+
+  it('accrual-basis fixture produces net_profit of $30,511.71 (Feb 2026 canonical)', () => {
+    const result = mapPLToFinancials(accrualSections, '2026-02')
+    // Accrual is what /api/xero-sync was writing pre-Sprint-17 — kept here as
+    // the regression assertion: if cash and accrual ever produce the same
+    // number, the mapper has lost its sensitivity to the source data.
+    expect(result.net_profit).toBeCloseTo(30511.71, 2)
+  })
+
+  it('the cash-vs-accrual delta is +$48,150.43 (the load-bearing swing)', () => {
+    const cash = mapPLToFinancials(cashSections, '2026-02').net_profit
+    const accrual = mapPLToFinancials(accrualSections, '2026-02').net_profit
+    expect(accrual - cash).toBeCloseTo(48150.43, 2)
+  })
+
+  it('mapper accepts an opts argument without throwing (forward-compat for Sprint 17C)', () => {
+    // 17C will add: function mapPLToFinancials(sections, month, opts = {}).
+    // Today the mapper ignores extra args — JS does not throw on additional
+    // arguments. This test guards the call shape so that when 17C lands the
+    // existing call sites do not break.
+    expect(() => mapPLToFinancials(cashSections, '2026-02', { basis: 'cash' })).not.toThrow()
+    expect(() => mapPLToFinancials(accrualSections, '2026-02', { basis: 'accrual' })).not.toThrow()
+    expect(() => mapPLToFinancials(cashSections, '2026-02', undefined)).not.toThrow()
+  })
+
+  // Future contract — will fail until 17C lands. Marked .todo so it appears
+  // in the test report as "needs implementation" without blocking the build.
+  // Once 17C lands, change `.todo` → `it(...)` and the assertions become
+  // load-bearing.
+  it.todo('output object contains a `basis` field reflecting opts.basis (default "cash")')
+  it.todo('passing { basis: "accrual" } sets result.basis === "accrual"')
+  it.todo('passing { basis: "cash" } sets result.basis === "cash"')
+  it.todo('omitting opts defaults result.basis to "cash" (Sprint 17 default flip)')
+})
