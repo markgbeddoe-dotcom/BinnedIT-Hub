@@ -105,6 +105,8 @@ const menuItems = [
   {id:'month-select',icon:'📥',label:'Load Data',section:null},
   // System
   {id:'settings',icon:'⚙️',label:'Settings',section:'SYSTEM'},
+  {id:'settings/audit',icon:'📜',label:'Audit Log',section:null, ownerOnly: true},
+  {id:'settings/team',icon:'👥',label:'Team',section:null, ownerOnly: true},
   {id:'about',icon:'ℹ️',label:'About',section:null},
 ];
 
@@ -123,7 +125,7 @@ export default function App() {
   });
 
   const { isMobile } = useBreakpoint();
-  const { profile } = useAuth();
+  const { profile, isOwner } = useAuth();
   const greetingName = profile?.full_name?.split(' ')[0] || 'there';
 
   // React Query: available months from Supabase with fallback
@@ -451,7 +453,7 @@ export default function App() {
         <div style={{fontSize:11,color:'#888',marginTop:2}}>Operations Platform v{VERSION}</div>
       </div>
       <div style={{flex:1,padding:'8px 0',overflowY:'auto'}}>
-        {menuItems.map(item => (<React.Fragment key={item.id}>
+        {menuItems.filter(item => !item.ownerOnly || isOwner).map(item => (<React.Fragment key={item.id}>
           {item.section && (
             <div style={{padding:'10px 20px 4px',fontSize:9,fontFamily:fontHead,fontWeight:700,letterSpacing:'0.12em',color:'#555',textTransform:'uppercase',borderTop:item.section!=='OPERATIONS'?`1px solid #222`:'none',marginTop:item.section!=='OPERATIONS'?8:0}}>
               {item.section}
