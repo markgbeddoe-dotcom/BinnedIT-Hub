@@ -40,6 +40,18 @@ self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('/api/')) return;
   if (event.request.url.includes('supabase.co')) return;
 
+  // Sprint 12 #16: defensively exclude /driver paths from the admin SW so
+  // the dedicated driver SW (`sw-driver.js`) owns that scope without overlap.
+  // The two SWs are registered against different URL prefixes via index.html,
+  // but we double-down here in case both happen to be active during an
+  // upgrade/transition window.
+  try {
+    const reqUrl = new URL(event.request.url);
+    if (reqUrl.pathname === '/driver' || reqUrl.pathname.indexOf('/driver/') === 0) {
+      return;
+    }
+  } catch (e) { /* fall through — non-fatal */ }
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {

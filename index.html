@@ -40,10 +40,18 @@
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
   <script>
+    // Sprint 12 #16: register a different service worker per scope so the
+    // admin Hub and the driver app don't share a runtime cache. Driver paths
+    // (`/driver` and below) get `/sw-driver.js` scoped to `/driver/`; every
+    // other path stays on the existing admin `/sw.js`.
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').then(reg => {
-          console.log('SW registered:', reg.scope);
+        var path = window.location.pathname;
+        var isDriver = path === '/driver' || path.indexOf('/driver/') === 0;
+        var swUrl = isDriver ? '/sw-driver.js' : '/sw.js';
+        var opts = isDriver ? { scope: '/driver/' } : { scope: '/' };
+        navigator.serviceWorker.register(swUrl, opts).then(reg => {
+          console.log('SW registered:', swUrl, reg.scope);
         }).catch(err => {
           console.log('SW registration failed:', err);
         });
