@@ -119,7 +119,8 @@ SkipSync/                              # repo root (workspace)
     │   ├── xero-payment-sync.js       # pull payments from Xero
     │   └── xero-sync.js               # push invoices / customers to Xero
     │
-    ├── supabase/migrations/           # 16 SQL files, applied in numeric order, idempotent
+    ├── supabase/migrations/           # 21 SQL files, applied in numeric order, idempotent
+    │   ├── README.md                              # convention: unique prefix, idempotency, next = 017_*
     │   ├── 001_initial_schema.sql                 # 16 base tables (profiles → financials → alerts)
     │   ├── 002_rls_policies.sql                   # Row Level Security policies
     │   ├── 003_default_thresholds.sql             # alert_thresholds seed
@@ -135,7 +136,12 @@ SkipSync/                              # repo root (workspace)
     │   ├── 009_invoices.sql                       # invoices (Phase 5)
     │   ├── 010_customers.sql                      # extended customers
     │   ├── 010_phase6_audit_team_compliance.sql   # audit_log, notifications, insurance_policies, staff_certificates
-    │   └── 011_fleet_status.sql                   # customer_notes + fleet status
+    │   ├── 011_fleet_status.sql                   # customer_notes + fleet status
+    │   ├── 012_white_label_tenants.sql            # tenants, tenant_bin_sizes; bookings.tenant_id
+    │   ├── 013_fix_rls_policies.sql               # permissive inserts: bookings, driver tables
+    │   ├── 014_crm_collections.sql                # 8 CRM tables + 19 customer columns (CreditorWatch, PPSR, risk)
+    │   ├── 015_platform_settings.sql              # platform_settings (key/value runtime config)
+    │   └── 016_booking_xero_invoice.sql           # bookings.xero_invoice_id, xero_invoice_status
     │
     ├── public/                        # Vite-served static assets
     │   ├── manifest.json              # PWA manifest
@@ -146,6 +152,23 @@ SkipSync/                              # repo root (workspace)
     │
     └── node_modules/                  # — not part of source tree
 ```
+
+## Recent additions (April 2026 — not yet in the tree above)
+
+These files landed on master between 7 and 27 April 2026 but post-date the directory listing above. Consult them directly when working in those areas.
+
+- `api/lib/xero-token.js` — shared OAuth token refresh helper for Xero endpoints
+- `api/xero-invoice.js` — POST endpoint: create a Xero invoice from a booking row
+- `scripts/apply-migration-013.js` — one-off utility for applying migration 013
+- `src/api/collections.js` — collections engine API (overdue accounts, dunning state)
+- `src/components/CRMBookingsPage.jsx` — CRM-driven bookings list + inline customer creation
+- `src/components/CollectionsPage.jsx` — collections workflow UI (dunning timeline + letter generation)
+- `src/components/CustomersPage.jsx` — extensively reworked for the CRM accounts feature
+- `src/components/EmbedBookingPage.jsx` — public iframe-embeddable booking widget at `/embed/<tenant-slug>`
+- `src/hooks/useCollections.js` — TanStack Query hooks for collections data
+- `src/lib/legalTemplates.js` — letter templates: dunning, demand, statutory
+
+Plus the schema additions for these features in migrations 012–016 (above).
 
 ## Critical entry points
 

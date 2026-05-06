@@ -91,6 +91,16 @@ All accept `{ selectedMonth, monthCount, monthLabel, reportId, reportMonth }` an
 | `NotificationBell` | `src/components/NotificationBell.jsx` | Header bell — recent notifications dropdown. |
 | `UIComponents` | `src/components/UIComponents.jsx` | Shared primitives: `AlertItem`, others. |
 
+## Recent additions (April 2026 — landed on master 7–27 April)
+
+| Component | Path | Role |
+|---|---|---|
+| `CRMBookingsPage` | `src/components/CRMBookingsPage.jsx` | CRM-driven bookings list. Inline new-customer creation in the booking modal with payment terms. |
+| `CollectionsPage` | `src/components/CollectionsPage.jsx` | Collections engine UI — overdue accounts list, dunning timeline, letter generation. Reads `collections_events`, `payment_history`, customer credit fields. |
+| `EmbedBookingPage` | `src/components/EmbedBookingPage.jsx` | Public iframe-embeddable booking widget at `/embed/<tenant-slug>`. Reads tenant config from `tenants` + `tenant_bin_sizes` (anon RLS). No auth required. |
+| `CustomersPage` (rework) | `src/components/CustomersPage.jsx` | Extensively reworked for the CRM accounts feature — credit status, CreditorWatch reference, risk score, payment history. |
+| `SettingsPage` (additions) | `src/components/SettingsPage.jsx` | Now also hosts: white-label embed code copier, Claude API key management (reads/writes `platform_settings.anthropic_api_key`), web push toggle. |
+
 ## Component conventions
 
 - Every tab is wrapped in `ErrorBoundary` keyed by tab id, so a runtime error in one tab doesn't break the others

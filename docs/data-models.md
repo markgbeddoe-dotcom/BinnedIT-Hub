@@ -2,7 +2,7 @@
 
 **Generated:** 2026-05-06
 **Database:** Supabase PostgreSQL (project ref `dkjwyzjzdcgrepbgiuei`)
-**Migrations:** 16 files in `BinnedIT-Hub/supabase/migrations/` — applied in numeric order, all idempotent (`CREATE TABLE IF NOT EXISTS …`)
+**Migrations:** 21 files in `BinnedIT-Hub/supabase/migrations/` — applied in numeric order, all idempotent (`CREATE TABLE IF NOT EXISTS …`)
 
 The authoritative schema is in the SQL migration files — this document is an AI-retrieval index, not a replacement.
 
@@ -26,6 +26,11 @@ The authoritative schema is in the SQL migration files — this document is an A
 | `010_customers.sql` | Extended `customers` columns |
 | `010_phase6_audit_team_compliance.sql` | `audit_log`, `notifications`, `insurance_policies`, `staff_certificates` |
 | `011_fleet_status.sql` | `customer_notes`, fleet status fields |
+| `012_white_label_tenants.sql` | `tenants`, `tenant_bin_sizes`. Adds `tenant_id` to `bookings`. Anon-read RLS for the embed widget. Seeds the `binned-it` demo tenant. |
+| `013_fix_rls_policies.sql` | Drops/recreates permissive INSERT policies on `bookings`, `vehicle_checklists`, `job_events`, `job_photos`, `hazard_reports` — driver writes were failing without an explicit `driver_id`. |
+| `014_crm_collections.sql` | 8 new tables: `customer_contacts`, `customer_directors`, `customer_trade_refs`, `credit_applications`, `account_contracts`, `customer_notes`, `collections_events`, `payment_history`. ALTER on `customers` adds 19+ columns (ABN, ACN, credit_status/limit, CreditorWatch, PPSR, risk_score, director_guarantee, outstanding/overdue balances, on_time_payment_pct, etc.). |
+| `015_platform_settings.sql` | New `platform_settings` (key/value) table — runtime config for API keys (e.g. Anthropic). Owner-only RLS. |
+| `016_booking_xero_invoice.sql` | Adds `xero_invoice_id` + `xero_invoice_status` to `bookings`. Tracks the booking → Xero invoice round-trip. |
 
 ## Tables grouped by domain
 
@@ -43,10 +48,23 @@ The authoritative schema is in the SQL migration files — this document is an A
 - `file_uploads` — audit trail of wizard imports (`parse_status: pending|success|failed`).
 
 ### Operations
-- `bookings` — booking lifecycle (added in 008).
-- `customers` — CRM (extended in 010).
+- `bookings` — booking lifecycle (added in 008). Now has `tenant_id` (012), `xero_invoice_id`/`xero_invoice_status` (016).
+- `customers` — CRM (extended in 010, hugely extended in 014 with credit/risk/CreditorWatch/PPSR fields).
 - `customer_order_history` — historical order summary.
-- `customer_notes` — free-text notes on customers (added in 011).
+- `customer_notes` — free-text notes on customers (originally 011, formalised in 014).
+- `tenants`, `tenant_bin_sizes` — white-label tenancy (012). Powers the iframe embed at `/embed/<slug>`.
+
+### CRM / Collections (added 014)
+- `customer_contacts` — multiple contacts per customer with role.
+- `customer_directors` — for director-guarantee tracking.
+- `customer_trade_refs` — trade references collected during credit application.
+- `credit_applications` — application records + outcome.
+- `account_contracts` — agreed terms, signed copies.
+- `collections_events` — log of every dunning action (call, email, letter sent).
+- `payment_history` — per-customer payment timeline; source for on-time-payment-pct.
+
+### Platform configuration (added 015)
+- `platform_settings` — generic key/value runtime config. Schema: `(key TEXT PK, value TEXT, updated_at, updated_by FK auth.users)`. Currently used to store the Anthropic API key (managed via Settings UI by owner).
 
 ### Fleet
 - `bin_types` — SKU catalog of bin sizes/types.
@@ -96,14 +114,17 @@ The authoritative schema is in the SQL migration files — this document is an A
 - `profiles.role` constrained to `owner|manager|bookkeeper|viewer`.
 - `alerts_log.severity` constrained to `critical|warning|info|positive`.
 
-## RLS (migration 002)
+## RLS (migration 002, refined in 013)
 
 Per-table policies enforce:
 - All authenticated users can read most tables
 - Writes restricted by `role` claim from `profiles`
 - Some tables (`alerts_log`, `compliance_records`) restrict reads by report ownership
+- **Anon read** of `tenants` (where `is_active=true`) and `tenant_bin_sizes` — required for the iframe embed at `/embed/<slug>` which has no auth.
+- **Anon insert** to `bookings` — required for the public booking widget. Migration 013 fixed this after `tenant_id` was added to `bookings` in 012.
+- Driver-side tables (`vehicle_checklists`, `job_events`, `job_photos`, `hazard_reports`) accept inserts from any authenticated user — the per-row `driver_id` check that was blocking owner/manager submissions was relaxed in 013.
 
-For the canonical policy set, read `002_rls_policies.sql` directly.
+For the canonical policy set, read `002_rls_policies.sql` and `013_fix_rls_policies.sql` directly.
 
 ## Indexes (from 001)
 
