@@ -3,16 +3,16 @@ import { B, fontHead, fmtFull } from '../theme';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import { pricingData, binTypesData, totalRevenue, totalCOS, totalOpex, fuelCosts, wages, tolls, repairs, rent, advertising, competitorData } from '../data/financials';
 import { allocateCosts, getJobCostBarSegments } from '../data/costAllocator';
+import { normalizeBinType } from '../lib/binTypes';
 
-// Map binTypesData names → pricingData type names
-const binNameMap = {
-  'WMF - 4m': '4m General Waste', 'WMF - 6m': '6m General Waste', 'WMF - 8m': '8m General Waste',
-  'WMF - 10m': '10m General Waste', 'WMF - 12m': '12m General Waste', 'WMF - 16m': '16m General Waste',
-  'WMF - 23m': '23m General Waste', 'ASB - 4m': '4m Asbestos', 'ASB - 6m': '6m Asbestos',
-  'ASB - 8m': '8m Asbestos', '6M CONT SOIL': '8m Soil',
-  'ASB - Bigm': '8m Asbestos', 'ASB - 10m': '10m Asbestos', 'ASB - 16m': '16m Asbestos',
-  'ASB - 23m': '23m Asbestos', 'ASB - 2M': '2m Asbestos', 'ASBESTOS 2M': '2m Asbestos',
-};
+// Sprint 11 #14: replaced the hand-maintained binNameMap with normalizeBinType
+// from src/lib/binTypes.js (Vitest-tested, accepts every legacy variant).
+// The legacy "ASB - Bigm" → "8m Asbestos" mapping was lossy; normalizer returns
+// null on Bigm so callers can decide explicitly. We fall back to the original
+// name in that case to avoid silent mapping into the wrong size.
+function mapBinTypeName(legacyName) {
+  return normalizeBinType(legacyName) || legacyName;
+}
 
 // Market ranges converted to ex GST (competitor websites show inc GST)
 const exG = v => Math.round(v / 1.1);
@@ -56,7 +56,7 @@ export default function PricingTab({ monthIndex = 7, monthLabel = 'Feb 2026' }) 
     if (monthIndex === 7) {
       // Feb: use real Bin Manager data
       binTypesData.forEach(b => {
-        const mapped = binNameMap[b.name];
+        const mapped = mapBinTypeName(b.name);
         if (!mapped) return;
         if (!curBins[mapped]) curBins[mapped] = { income: 0, jobs: 0, avgRate: 0 };
         curBins[mapped].income += b.income;
