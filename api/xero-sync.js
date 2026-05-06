@@ -15,6 +15,12 @@
 export const config = { runtime: 'edge' }
 
 import { getValidToken, verifySupabaseJWT } from './lib/xero-token.js'
+import {
+  parsePLSections,
+  mapPLToFinancials,
+  parseBalanceSheet,
+  parseAgedReceivables,
+} from './lib/xero-mapper.js'
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dkjwyzjzdcgrepbgiuei.supabase.co'
 const XERO_API = 'https://api.xero.com/api.xro/2.0'
@@ -53,289 +59,8 @@ async function fetchAgedReceivables(accessToken, tenantId, fromDate, toDate) {
   return data.Reports?.[0]
 }
 
-// ── P&L parser ────────────────────────────────────────────────────────────────
-
-function parseAmount(val) {
-  if (!val) return 0
-  const n = parseFloat(String(val).replace(/[,$]/g, ''))
-  return isNaN(n) ? 0 : n
-}
-
-// Returns { sectionTitle → { _total: number, _rows: [{name, amount}] } }
-function parsePLSections(report) {
-  const sections = {}
-  if (!report?.Rows) return sections
-
-  for (const row of report.Rows) {
-    if (row.RowType === 'Section' && row.Title) {
-      const title = row.Title.toLowerCase()
-      sections[title] = { _total: 0, _rows: [] }
-      for (const r of (row.Rows || [])) {
-        if (r.RowType === 'Row' && r.Cells?.length >= 2) {
-          const name = r.Cells[0]?.Value || ''
-          const amount = parseAmount(r.Cells[1]?.Value)
-          sections[title]._rows.push({ name, amount })
-        }
-        if (r.RowType === 'SummaryRow' && r.Cells?.length >= 2) {
-          sections[title]._total = parseAmount(r.Cells[1]?.Value)
-        }
-      }
-    }
-  }
-  console.log('XERO_PL_SECTIONS:', Object.keys(sections))
-  return sections
-}
-
-function sumByKeywords(rows, ...keywords) {
-  return rows
-    .filter(r => keywords.some(k => r.name.toLowerCase().includes(k.toLowerCase())))
-    .reduce((sum, r) => sum + r.amount, 0)
-}
-
-// Get section total: SummaryRow value if non-zero, else sum of all Row amounts
-function sectionTotal(section) {
-  if (!section) return 0
-  if (section._total !== 0) return section._total
-  return section._rows.reduce((sum, r) => sum + r.amount, 0)
-}
-
-function mapPLToFinancials(sections, month) {
-  // ── Revenue ───────────────────────────────────────────────────────────────────
-  // Primary: Xero may split revenue into 'revenue - <category>' sub-sections.
-  // Fallback: Binned-IT uses a single flat 'trading income' section with all SKU rows.
-  // Debug: log all section keys so we can verify the mapping is correct.
-  console.log('XERO_PL_SECTION_KEYS:', JSON.stringify(Object.keys(sections)))
-
-  const revSubKeys = Object.keys(sections).filter(k => k.startsWith('revenue -'))
-  const hasTradingIncome = !!sections['trading income']
-
-  let revAsbestos = 0, revSoil = 0, revGreen = 0, revOther = 0
-
-  if (revSubKeys.length > 0) {
-    // Standard Xero structure: 'revenue - asbestos', 'revenue - soil', etc.
-    revAsbestos = revSubKeys
-      .filter(k => k.includes('asbestos'))
-      .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
-
-    revSoil = revSubKeys
-      .filter(k => k.includes('soil') || k.includes('contaminated'))
-      .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
-
-    revGreen = revSubKeys
-      .filter(k => k.includes('green'))
-      .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
-
-    revOther = revSubKeys
-      .filter(k => !k.includes('asbestos') && !k.includes('soil') && !k.includes('contaminated') && !k.includes('green'))
-      .reduce((sum, k) => sum + Math.abs(sectionTotal(sections[k])), 0)
-  } else if (hasTradingIncome) {
-    // Binned-IT fallback: single 'trading income' section with all SKU line items.
-    // Classify each row by name keyword into the revenue sub-categories.
-    const tradingRows = sections['trading income']._rows
-    for (const row of tradingRows) {
-      const n = row.name.toLowerCase()
-      const amt = Math.abs(row.amount)
-      if (n.includes('asb') || n.includes('asbestos')) {
-        revAsbestos += amt
-      } else if (n.includes('soil') || n.includes('soi') || n.includes('contaminated') || n.includes('csoil')) {
-        revSoil += amt
-      } else if (n.includes('grw') || n.includes('green')) {
-        revGreen += amt
-      } else {
-        revOther += amt
-      }
-    }
-    console.log('XERO_PL_REVENUE_FALLBACK: using trading income section rows to classify revenue')
-  } else {
-    // Last-resort: try 'income' section (some Xero accounts use this label)
-    const incomeSection = sections['income'] || { _rows: [] }
-    revOther = Math.abs(sectionTotal(incomeSection))
-    console.log('XERO_PL_REVENUE_FALLBACK: using income section, total =', revOther)
-  }
-
-  // Always sum individual revenue sub-categories for rev_total.
-  const revTotal = revAsbestos + revSoil + revGreen + revOther
-
-  // ── Cost of Sales ─────────────────────────────────────────────────────────────
-  // Primary: 'less cost of sales'  (some Xero accounts prefix with 'less')
-  // Fallback: 'cost of sales'      (Binned-IT actual section name)
-  // Last-resort: 'cost of goods sold'
-  const cosSection =
-    sections['less cost of sales'] ||
-    sections['cost of sales']      ||
-    sections['cost of goods sold'] ||
-    { _total: 0, _rows: [] }
-
-  if (!sections['less cost of sales'] && sections['cost of sales']) {
-    console.log('XERO_PL_COS_FALLBACK: matched "cost of sales" (not "less cost of sales")')
-  }
-
-  const cosTotal = Math.abs(sectionTotal(cosSection))
-  const cosRows  = cosSection._rows
-
-  // For Binned-IT: wages/payroll are under OPEX (Operating Expenses), NOT COS.
-  // COS contains: recycling costs, tipping costs, bin-specific disposal fees.
-  const cosWages    = Math.abs(sumByKeywords(cosRows, 'wage', 'driver', 'labour', 'labor'))
-  const cosFuel     = Math.abs(sumByKeywords(cosRows, 'fuel', 'petrol', 'diesel'))
-  const cosDisposal = Math.abs(sumByKeywords(cosRows, 'tip', 'disposal', 'landfill', 'waste levy', 'tipping', 'recycling'))
-  const cosOther    = Math.max(0, cosTotal - cosWages - cosFuel - cosDisposal)
-
-  // ── Operating Expenses ────────────────────────────────────────────────────────
-  // Primary: 'less operating expenses'  (some Xero accounts prefix with 'less')
-  // Fallback: 'operating expenses'      (Binned-IT actual section name)
-  // Also check for supplementary sections: 'other overheads', 'staffing overheads'
-  const opexMainSection =
-    sections['less operating expenses'] ||
-    sections['operating expenses']      ||
-    sections['expenses']               ||
-    { _total: 0, _rows: [] }
-
-  if (!sections['less operating expenses'] && sections['operating expenses']) {
-    console.log('XERO_PL_OPEX_FALLBACK: matched "operating expenses" (not "less operating expenses")')
-  }
-
-  const opexOtherSection = sections['other overheads']   || { _total: 0, _rows: [] }
-  const opexStaffSection = sections['staffing overheads'] || { _total: 0, _rows: [] }
-
-  const opexMainTotal  = Math.abs(sectionTotal(opexMainSection))
-  const opexOtherTotal = Math.abs(sectionTotal(opexOtherSection))
-  const opexStaffTotal = Math.abs(sectionTotal(opexStaffSection))
-  const opexTotal      = opexMainTotal + opexOtherTotal + opexStaffTotal
-
-  // staffing overheads → opex_admin (wages/staff); otherwise pull wages from main opex rows
-  const opexRows     = opexMainSection._rows
-  const opexWages    = opexStaffTotal > 0 ? opexStaffTotal : Math.abs(sumByKeywords(opexRows, 'wage', 'salary', 'super', 'payroll'))
-  const opexAdmin    = opexWages
-
-  // 'less operating expenses' / 'operating expenses' rows → rent, insurance, advertising
-  const opexRent   = Math.abs(sumByKeywords(opexRows, 'rent', 'lease'))
-  const opexAdvert = Math.abs(sumByKeywords(opexRows, 'adverti', 'market', 'promo'))
-  const opexInsur  = Math.abs(sumByKeywords(opexRows, 'insur'))
-
-  // opex_other = 'other overheads' total + unclassified rows from main opex section
-  const opexMainKnown = opexWages + opexRent + opexAdvert + opexInsur
-  const opexOther = opexOtherTotal + Math.max(0, opexMainTotal - opexMainKnown)
-
-  // ── Derived ───────────────────────────────────────────────────────────────────
-  const grossProfit    = revTotal - cosTotal
-  const grossMarginPct = revTotal > 0 ? (grossProfit / revTotal) * 100 : 0
-  const netProfit      = grossProfit - opexTotal
-  const netMarginPct   = revTotal > 0 ? (netProfit / revTotal) * 100 : 0
-
-  console.log('XERO_PL_PARSED:', {
-    month,
-    revTotal, revAsbestos, revSoil, revGreen, revOther,
-    cosTotal, cosWages, cosFuel, cosDisposal, cosOther,
-    opexTotal, opexAdmin, opexRent, opexAdvert, opexInsur, opexOther,
-    grossProfit, grossMarginPct: Math.round(grossMarginPct * 10) / 10,
-    netProfit, netMarginPct: Math.round(netMarginPct * 10) / 10,
-  })
-
-  // Columns sent match financials_monthly schema exactly — no extras
-  return {
-    rev_general: 0,
-    rev_asbestos: revAsbestos,
-    rev_soil: revSoil,
-    rev_green: revGreen,
-    rev_other: revOther,
-    rev_total: revTotal,
-    cos_wages: cosWages,
-    cos_fuel: cosFuel,
-    cos_disposal: cosDisposal,
-    cos_other: cosOther,
-    cos_total: cosTotal,
-    gross_profit: grossProfit,
-    gross_margin_pct: Math.round(grossMarginPct * 10) / 10,
-    opex_rent: opexRent,
-    opex_admin: opexAdmin,
-    opex_advertising: opexAdvert,
-    opex_insurance: opexInsur,
-    opex_other: opexOther,
-    opex_total: opexTotal,
-    net_profit: netProfit,
-    net_margin_pct: Math.round(netMarginPct * 10) / 10,
-    revenue_total: revTotal,
-  }
-}
-
-// ── Balance sheet parser ──────────────────────────────────────────────────────
-
-function parseBalanceSheet(report) {
-  if (!report?.Rows) return {}
-
-  let cash = 0, ar = 0, totalAssets = 0, totalLiabilities = 0, equity = 0
-  let gst = 0, payg = 0
-
-  for (const row of report.Rows) {
-    if (row.RowType === 'Section') {
-      const title = (row.Title || '').toLowerCase()
-      const rows = row.Rows || []
-
-      for (const r of rows) {
-        if (r.RowType !== 'Row' && r.RowType !== 'SummaryRow') continue
-        const name   = (r.Cells?.[0]?.Value || '').toLowerCase()
-        const amount = parseAmount(r.Cells?.[1]?.Value)
-
-        if (r.RowType === 'SummaryRow') {
-          if (title.includes('asset'))    totalAssets += Math.abs(amount)
-          if (title.includes('liabilit')) totalLiabilities += Math.abs(amount)
-          if (title.includes('equity'))   equity = amount
-        } else {
-          if (name.includes('cash') || name.includes('bank') || name.includes('westpac')) cash += amount
-          if (name.includes('receivable') || name.includes('debtors')) ar = amount
-          if (name.includes('gst'))                                    gst  += Math.abs(amount)
-          if (name.includes('payg') || name.includes('withholding'))   payg += Math.abs(amount)
-        }
-      }
-    }
-  }
-
-  // Columns sent match balance_sheet_monthly schema exactly — no extras
-  return {
-    cash_balance: cash,
-    accounts_receivable: ar,
-    total_assets: totalAssets,
-    total_liabilities: totalLiabilities,
-    net_equity: equity,
-    gst_liability: gst,
-    payg_liability: payg,
-  }
-}
-
-// ── AR aging parser ───────────────────────────────────────────────────────────
-
-function parseAgedReceivables(report) {
-  if (!report?.Rows) return { total: 0, current: 0, days30: 0, days60: 0, days90: 0, older: 0, topDebtors: [] }
-
-  let total = 0, current = 0, days30 = 0, days60 = 0, days90 = 0, older = 0
-  const topDebtors = []
-
-  for (const row of report.Rows) {
-    if (row.RowType === 'Row' && row.Cells?.length >= 6) {
-      const name = row.Cells[0]?.Value || ''
-      if (!name || name === 'Total') continue
-      const cur      = parseAmount(row.Cells[1]?.Value)
-      const d30      = parseAmount(row.Cells[2]?.Value)
-      const d60      = parseAmount(row.Cells[3]?.Value)
-      const d90      = parseAmount(row.Cells[4]?.Value)
-      const old      = parseAmount(row.Cells[5]?.Value)
-      const rowTotal = cur + d30 + d60 + d90 + old
-
-      current += cur; days30 += d30; days60 += d60; days90 += d90; older += old; total += rowTotal
-
-      // Calculate actual days overdue from the most overdue bucket that has a balance
-      let daysOverdue = 0
-      if (d90 + old > 0) daysOverdue = 90
-      else if (d60 > 0)  daysOverdue = 60
-      else if (d30 > 0)  daysOverdue = 30
-
-      if (rowTotal > 0) topDebtors.push({ name, total: rowTotal, days_overdue: daysOverdue })
-    }
-  }
-
-  topDebtors.sort((a, b) => b.total - a.total)
-  return { total, current, days30, days60, days90, older, topDebtors: topDebtors.slice(0, 10) }
-}
+// Mapping helpers live in api/lib/xero-mapper.js (Vitest-tested).
+// See docs/audits/2026-05-06/audit-reconciliation.md for the rewrite rationale.
 
 // ── Supabase writers ──────────────────────────────────────────────────────────
 
@@ -463,17 +188,34 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
     await deleteAndInsert('balance_sheet_monthly', reportId, reportMonth, balanceSheet, serviceKey)
   }
 
-  // AR disabled — debtors_monthly requires per-debtor rows; skipping until reworked
-  void arData
+  // Step 4: DELETE all existing debtors_monthly rows for this month, then INSERT one per debtor.
+  // Re-enabled 2026-05-07 — see api/lib/xero-mapper.js parseAgedReceivables (audit P0-4 + P1).
+  let debtorsWritten = 0
+  if (arData?.perDebtor?.length) {
+    await deleteDebtorsForMonth(reportMonth, serviceKey)
+    for (const d of arData.perDebtor) {
+      await insertToSupabase('debtors_monthly', {
+        report_id: reportId,
+        report_month: reportMonth,
+        debtor_name: d.name,
+        current_amount: d.current,
+        overdue_30: d.days30,
+        overdue_60: d.days60,
+        overdue_90plus: d.days90 + d.older,   // schema combines 90+ and older
+        total_outstanding: d.total,
+      }, serviceKey)
+      debtorsWritten++
+    }
+  }
 
   await insertToSupabase('xero_sync_log', {
     sync_month: reportMonth,
     status: 'success',
-    message: `Synced P&L + BS from Xero: ${tenantId}`,
+    message: `Synced P&L + BS + AR from Xero: ${tenantId}`,
     rows_written: {
       financials: 1,
       balance_sheet: balanceSheet.total_assets ? 1 : 0,
-      debtors: 0,
+      debtors: debtorsWritten,
     },
     synced_by: userId || null,
     created_at: new Date().toISOString(),
@@ -485,7 +227,20 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId) {
     cos: financials.cos_total,
     grossMargin: financials.gross_margin_pct,
     netProfit: financials.net_profit,
-    arTotal: null,
+    arTotal: arData?.total ?? null,
+    debtorsWritten,
+  }
+}
+
+// Delete all debtors_monthly rows for a given report_month (per-debtor wipe-and-rewrite).
+async function deleteDebtorsForMonth(reportMonth, serviceKey) {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/debtors_monthly?report_month=eq.${encodeURIComponent(reportMonth)}`,
+    { method: 'DELETE', headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey } }
+  )
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Supabase debtors_monthly delete failed: ${err}`)
   }
 }
 
