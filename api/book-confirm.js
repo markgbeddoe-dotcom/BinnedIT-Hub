@@ -7,7 +7,16 @@
  *   - Sending FROM the @binned-it.com.au domain
  *
  * If RESEND_API_KEY is missing → skips email silently (still returns 200).
- * SMS notification → placeholder console log (Twilio not yet integrated).
+ *
+ * SMS notification (Sprint 13 #21): real Twilio REST API call.
+ *   - Requires env vars TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER.
+ *   - Uses direct fetch (no SDK — Edge runtime friendly).
+ *   - FAIL-SOFT: if any of those env vars are missing, logs a warning and
+ *     returns success WITHOUT sending. Missing config must NEVER break the
+ *     booking flow (the booking is already saved to Supabase before we get
+ *     here — SMS is best-effort).
+ *   - A 4xx/5xx Twilio response is logged but never thrown, for the same
+ *     reason: a single failed SMS must not break the customer's booking.
  */
 
 export const config = { runtime: 'edge' };
@@ -108,6 +117,111 @@ function buildCustomerHtml({ bookingRef, customerName, binSize, deliveryDate, pr
 </html>`;
 }
 
+/**
+ * Format a YYYY-MM-DD date string as "DD Mon YYYY" for the SMS body.
+ * Returns the raw input if it doesn't match that shape (e.g. already formatted
+ * or empty) — the SMS body should never throw, even with bad input.
+ */
+function formatSmsDate(deliveryDate) {
+  if (!deliveryDate || typeof deliveryDate !== 'string') return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(deliveryDate);
+  if (!m) return deliveryDate;
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const [, y, mo, d] = m;
+  return `${parseInt(d, 10)} ${months[parseInt(mo, 10) - 1]} ${y}`;
+}
+
+/**
+ * Build the friendly + actionable SMS body for the customer confirmation.
+ * Kept short to fit in a single SMS segment where possible.
+ */
+function buildSmsBody({ bookingRef, deliveryDate }) {
+  const shortId = bookingRef || 'PENDING';
+  const when    = formatSmsDate(deliveryDate);
+  return `Thanks for booking with SkipSync — bin scheduled for delivery on ${when}. Confirmation #${shortId}. Reply STOP to opt out.`;
+}
+
+/**
+ * Send the booking-confirmation SMS via Twilio's REST API.
+ *
+ * Returns (ok: true is always set — this function never represents a failure
+ * worth blocking the booking):
+ *   { ok: true, smsSent: true,  sid }                       — Twilio accepted the message
+ *   { ok: true, smsSent: false, reason: 'twilio_not_configured' } — missing env config (fail-soft)
+ *   { ok: true, smsSent: false, reason: 'no_phone' }              — no customerPhone provided
+ *   { ok: true, smsSent: false, reason: 'twilio_error', status }  — Twilio returned 4xx/5xx (logged, not thrown)
+ *   { ok: true, smsSent: false, reason: 'fetch_failed' }          — network/transport error (logged, not thrown)
+ *
+ * NEVER throws. The booking is already persisted by the time this runs —
+ * a single failed SMS must not break the customer's booking flow.
+ *
+ * Exported so vitest can drive it directly without going through the handler.
+ */
+export async function sendSmsConfirmation({ customerPhone, bookingRef, deliveryDate }) {
+  const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+  const AUTH_TOKEN  = process.env.TWILIO_AUTH_TOKEN;
+  const FROM_NUMBER = process.env.TWILIO_FROM_NUMBER;
+
+  // ── FAIL-SOFT: missing config ────────────────────────────────────────────
+  // If Twilio isn't provisioned yet (e.g. dev, preview, or ops still
+  // provisioning the account), we log a warning and skip the send. The
+  // booking flow MUST stay green — SMS is best-effort.
+  if (!ACCOUNT_SID || !AUTH_TOKEN || !FROM_NUMBER) {
+    console.warn('[book-confirm] Twilio env vars missing — skipping SMS. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER in Vercel.');
+    return { ok: true, smsSent: false, reason: 'twilio_not_configured' };
+  }
+
+  if (!customerPhone) {
+    console.warn('[book-confirm] No customerPhone on booking — skipping SMS.');
+    return { ok: true, smsSent: false, reason: 'no_phone' };
+  }
+
+  const body = buildSmsBody({ bookingRef, deliveryDate });
+
+  const params = new URLSearchParams();
+  params.set('From', FROM_NUMBER);
+  params.set('To',   customerPhone);
+  params.set('Body', body);
+
+  // HTTP Basic auth: base64('ACCOUNT_SID:AUTH_TOKEN').
+  // btoa is available in the Edge runtime (V8 isolate, not Node).
+  const basic = btoa(`${ACCOUNT_SID}:${AUTH_TOKEN}`);
+  const url   = `https://api.twilio.com/2010-04-01/Accounts/${ACCOUNT_SID}/Messages.json`;
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${basic}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    if (!res.ok) {
+      // FAIL-SOFT: log Twilio's error response (often a 4xx for bad numbers,
+      // unverified trial recipients, etc.) but never throw — the booking is
+      // already saved.
+      let errText = '';
+      try { errText = await res.text(); } catch { /* ignore */ }
+      console.error(`[book-confirm] Twilio responded ${res.status}: ${errText}`);
+      return { ok: true, smsSent: false, reason: 'twilio_error', status: res.status };
+    }
+
+    let sid;
+    try {
+      const json = await res.json();
+      sid = json?.sid;
+    } catch { /* response body parse failure is non-fatal */ }
+    console.log(`[book-confirm] SMS sent via Twilio${sid ? ` (sid=${sid})` : ''} for booking #${bookingRef || 'PENDING'}`);
+    return { ok: true, smsSent: true, sid };
+  } catch (err) {
+    // Network/transport error — log but never throw.
+    console.error('[book-confirm] Twilio fetch failed:', err?.message || err);
+    return { ok: true, smsSent: false, reason: 'fetch_failed' };
+  }
+}
+
 function buildOfficeText({ bookingRef, customerName, customerEmail, customerPhone, binSize, deliveryDate, suburb, postcode, price }) {
   return `NEW BOOKING #${bookingRef || 'PENDING'}
 
@@ -141,15 +255,22 @@ export default async function handler(req) {
 
   const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
-  // ── SMS placeholder ───────────────────────────────────────────────────────
-  // TODO: replace with Twilio when credentials are provisioned
-  console.log(`[SMS-PLACEHOLDER] New booking #${bookingRef || bookingId?.slice(0,8)?.toUpperCase()}: ${customerName}, ${binSize}, delivery ${deliveryDate}, ${suburb}`);
+  // ── SMS via Twilio ────────────────────────────────────────────────────────
+  // Sprint 13 #21: real Twilio REST send. Helper is fail-soft — if env vars
+  // are missing or Twilio returns an error, it logs and resolves with
+  // smsSent:false rather than throwing. The booking is already persisted, so
+  // a failed SMS must NEVER break the booking flow.
+  const smsResult = await sendSmsConfirmation({
+    customerPhone,
+    bookingRef: bookingRef || bookingId?.slice(0, 8)?.toUpperCase(),
+    deliveryDate,
+  });
 
   // ── Email via Resend ──────────────────────────────────────────────────────
   // Only send from @binned-it.com.au domain — requires RESEND_API_KEY + verified domain
   if (!RESEND_API_KEY) {
     console.log('[book-confirm] RESEND_API_KEY not set — skipping email. Booking saved to Supabase.');
-    return Response.json({ sent: false, reason: 'no_api_key' });
+    return Response.json({ sent: false, reason: 'no_api_key', sms: smsResult });
   }
 
   const emailPayloads = [
@@ -189,9 +310,9 @@ export default async function handler(req) {
   if (errors.length > 0) {
     console.error('[book-confirm] Resend errors:', errors);
     // Still return 200 — booking is already saved; email is best-effort
-    return Response.json({ sent: false, errors }, { status: 200 });
+    return Response.json({ sent: false, errors, sms: smsResult }, { status: 200 });
   }
 
   console.log(`[book-confirm] Emails sent for booking #${bookingRef}`);
-  return Response.json({ sent: true, bookingRef });
+  return Response.json({ sent: true, bookingRef, sms: smsResult });
 }
