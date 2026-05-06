@@ -36,9 +36,14 @@ Thumbs.db
 
 # Playwright test artifacts
 .playwright-mcp/
+test-results/
+playwright-report/
 *.png
 qa-*.png
 mobile-*.png
+
+# Claude Code per-project state (never commit)
+.claude/
 
 # TypeScript
 *.tsbuildinfo
