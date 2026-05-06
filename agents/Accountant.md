@@ -433,6 +433,36 @@ After Sprints 10 + 11 closed the highest-priority data-integrity items, the rema
 
 ---
 
+### 2026-05-07-PM — Cash vs accrual basis: SkipSync was reading the wrong source the whole time (Sprint 17 #17A)
+
+Mark identified during Sprint 17 design that `api/xero-sync.js` calls Xero's `Reports/ProfitAndLoss` endpoint **without `paymentsOnly=true`**. Xero's default on that endpoint is **accrual**. Binned-IT runs cash. Every dashboard tile, alert, and investor-route number sourced from `financials_monthly` for the entire pre-Sprint-17 history has been **on the wrong basis for the decisions it was driving**.
+
+Full reconciliation in `docs/audits/2026-05-07-cash-vs-accrual-reconciliation.md`. Headline numbers tied to source:
+
+- **Feb-26 net profit on accrual: $30,511.71. On cash: ($17,638.72). Single-month swing: $48,150.43** — 3.2× performance materiality and a sign-flip from profit to loss.
+- **YTD (Jul-25 → Feb-26) net profit on accrual: $146,799.14. On cash: $112,401.32. YTD overstatement on accrual: $34,397.82 (30.6%).**
+- **Trading income gap is the dominant driver in Feb-26: $43,384 of Feb invoices were not collected in Feb** (now sitting in March-collectable AR).
+- Three months breach perf-materiality at the NP delta line: Oct-25 (+$15,263 favourable to cash), Feb-26 (−$48,150 unfavourable to cash), and YTD (−$34,398 unfavourable to cash).
+- Other months show normal AR-cycling reversals (Sep → Oct, Aug → Sep COS) and one lumpy-cost month (Dec-25 Workcover annual + double rent payment) — all explainable, all below NP-line materiality individually.
+
+**Finding (the lesson worth surfacing):** Sprint 10 reconciled SkipSync's `financials_monthly` to the cent against the Xero **accrual** P&L export — 99 Vitest assertions, all green, signed off as Reporting-confidence Green. **That work is correct against the source it was tied to and remains useful.** What it did not — could not, given the assumption baked into the sync writer — establish was that the source itself was the right one for the business's decision context. **Perfect accuracy against the wrong source is still wrong.** The integrity score of 🟢 Green was honest given the data Meg had at the time, but the underlying confidence rested on an unexamined assumption (`paymentsOnly=true` was never being passed; nobody checked because the report ran without error).
+
+**Source of truth update:** The Xero P&L is **two reports, not one**, and SkipSync needs both. The accrual P&L is the AASB-compliant management view (correct for investor reporting under AASB 101). The cash P&L (`paymentsOnly=true`) is the operating reality (correct for loss-maker pricing decisions, ATO cash forecasting, "did we make money this month" questions). Neither is the "right" basis in isolation — the basis is a function of the decision being made, not a property of the data.
+
+**Process change (effective immediately, applies from next period close):**
+1. **Every period close must verify both bases match expectations, not just one.** The 5-way reconciliation (§5) is now run **twice per period** — once on cash, once on accrual. Both must reconcile within materiality before sign-off. Either basis failing is a Red integrity score, not just Amber.
+2. **Working papers (§7.1 template) must include a "basis used" header line** stating which Xero export was the source. If both were used, both filenames go in the header.
+3. **A new defensive check is added to the §8 first-action checklist (between steps 4 and 5):** "Confirm which basis the source data is on. Cash and accrual exports of the same period are not interchangeable. If only one basis is available, document why and flag the working paper's confidence accordingly."
+4. **The §6.4 KPI integrity scoring gains a basis assertion:** a tab cannot be 🟢 Green if its underlying basis is not the basis appropriate to the decision the tab drives. SnapshotTab loss-maker alerts on accrual data are now 🔴 Red until Sprint 17 #17B–E lands cash-basis ingestion.
+5. **Sprint 17 architecture recommendation (handed to sibling agents 17B–E):** cash as default, user toggle persisted in `platform_settings.user_prefs.financial_basis`, dual columns (`*_cash` + `*_accrual`) in `financials_monthly` so historic toggling is possible without re-syncing, side-by-side both-bases display in the Snapshot KPI tile so the gap is structurally obvious.
+6. **Diagnostic assertion added to the recommended sync writer rewrite:** if `|cash_np − accrual_np| / |accrual_np| > 30%` for a closed month, log a warning and surface an Amber integrity flag. Feb-26 would trip this at 158% — exactly the kind of thing that should have fired before tonight's discovery.
+
+**Recurrence risk:** **Moderate** post-mitigation, **High** without it. The general failure mode — "we audited the data we had against a source we trusted, but didn't audit the choice of source itself" — is a structural blind spot in any reconciliation framework. It can recur the next time a Xero report endpoint takes an optional parameter we don't pass, or a chart-of-accounts subset is silently filtered. **Mitigation:** the §6.4 integrity score now requires explicit basis-appropriateness, not just numeric tie-out. **A 🟢 Green badge requires answering "right number on the right basis for the decision being made", not just "number matches source".**
+
+**Scope boundary for tonight's audit:** Meg's deliverable is the working paper + this learnings entry + the Sprint 17 recommendation. Implementation (sync writer changes, schema migration, UI toggle, side-by-side tile) is owned by sibling agents 17B–E. Re-reconciliation against the new cash-basis sync, once it lands, is the next Meg engagement — required before any post-Sprint-17 month-end sign-off.
+
+---
+
 ## 11 — How to invoke
 
 In a new Claude Code session in this repo:
