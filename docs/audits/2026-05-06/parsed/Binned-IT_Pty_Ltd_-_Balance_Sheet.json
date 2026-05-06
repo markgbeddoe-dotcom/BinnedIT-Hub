@@ -1,0 +1,349 @@
+{
+  "Balance Sheet": [
+    [
+      "Balance Sheet",
+      null,
+      null
+    ],
+    [
+      "Binned-IT Pty Ltd",
+      null,
+      null
+    ],
+    [
+      "As at 30 April 2026",
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      "Account",
+      "30 Apr 2026"
+    ],
+    [
+      null,
+      null,
+      null
+    ],
+    [
+      "Assets",
+      null,
+      null
+    ],
+    [
+      null,
+      "Bank",
+      null
+    ],
+    [
+      null,
+      "Binned-It Pty Ltd",
+      77811.38
+    ],
+    [
+      null,
+      "Total Bank",
+      0
+    ],
+    [
+      null,
+      "Current Assets",
+      null
+    ],
+    [
+      null,
+      "1100l wheelie bins",
+      7043.63
+    ],
+    [
+      null,
+      "Accounts Receivable",
+      118082.03
+    ],
+    [
+      null,
+      "Bond - 3 Cumberland Dr Seaford",
+      20533.33
+    ],
+    [
+      null,
+      "Loan to All About Enterprises",
+      -1000
+    ],
+    [
+      null,
+      "Total Current Assets",
+      0
+    ],
+    [
+      null,
+      "Fixed Assets",
+      null
+    ],
+    [
+      null,
+      "Bin - 12m 2nd Hand Bin",
+      9000
+    ],
+    [
+      null,
+      "Bin - 23m",
+      -5000
+    ],
+    [
+      null,
+      "Bin - 6m Second Hand Bin",
+      22818.18
+    ],
+    [
+      null,
+      "Bin 20m (2nd hand)",
+      9000
+    ],
+    [
+      null,
+      "Machinery & Trucks at Cost",
+      445819
+    ],
+    [
+      null,
+      "Motor Vehicles at Cost",
+      28754
+    ],
+    [
+      null,
+      "Office Equipment",
+      7421.55
+    ],
+    [
+      null,
+      "Total Fixed Assets",
+      0
+    ],
+    [
+      null,
+      "Non-current Assets",
+      null
+    ],
+    [
+      null,
+      "Bin - 9m 2nd Hand Bin",
+      3245.45
+    ],
+    [
+      null,
+      "Bond - Yard",
+      -0.05
+    ],
+    [
+      null,
+      "Borrowing Cost",
+      450
+    ],
+    [
+      null,
+      "Total Non-current Assets",
+      0
+    ],
+    [
+      "Total Assets",
+      null,
+      0
+    ],
+    [
+      null,
+      null,
+      null
+    ],
+    [
+      "Liabilities",
+      null,
+      null
+    ],
+    [
+      null,
+      "Current Liabilities",
+      null
+    ],
+    [
+      null,
+      "Accounts Payable",
+      9828.71
+    ],
+    [
+      null,
+      "GST",
+      231075.23
+    ],
+    [
+      null,
+      "GST Adjustment",
+      61.16
+    ],
+    [
+      null,
+      "Owner A Drawings - Mark Beddoe",
+      218.73
+    ],
+    [
+      null,
+      "Owner B Drawings - Andrew Beddoe",
+      -2850.62
+    ],
+    [
+      null,
+      "PAYG Withholdings Payable",
+      507103
+    ],
+    [
+      null,
+      "Rounding",
+      118.05
+    ],
+    [
+      null,
+      "Superannuation Payable",
+      1874.04
+    ],
+    [
+      null,
+      "Suspense",
+      1425.45
+    ],
+    [
+      null,
+      "Wages Payable - Payroll",
+      1168.69
+    ],
+    [
+      null,
+      "Westpac Business Cash Reserve",
+      106.36
+    ],
+    [
+      null,
+      "Total Current Liabilities",
+      0
+    ],
+    [
+      null,
+      "Non-current Liabilities",
+      null
+    ],
+    [
+      null,
+      "ATO Clearing Account",
+      -464214.44
+    ],
+    [
+      null,
+      "Capital Finance Loan - XE27U Excavator 2022",
+      50435.42
+    ],
+    [
+      null,
+      "FTX Credits",
+      2362
+    ],
+    [
+      null,
+      "Loan - Allison Clair Consulting Group Pty Ltd",
+      20500
+    ],
+    [
+      null,
+      "Loan - Andrew Beddoe",
+      59178.39
+    ],
+    [
+      null,
+      "Loan - FlexiCommercial",
+      56685.3
+    ],
+    [
+      null,
+      "Loan - Hino 500FE Truck",
+      49905.07
+    ],
+    [
+      null,
+      "Loan - Hunter Premium Funding (Insurance)",
+      -54643.59
+    ],
+    [
+      null,
+      "Loan - Mark Beddoe",
+      105197.84
+    ],
+    [
+      null,
+      "Loan - MV Macquarie Leasing",
+      3215.99
+    ],
+    [
+      null,
+      "Loan Grow Funding (Hino 500 Series)",
+      12921.56
+    ],
+    [
+      null,
+      "Unexpired Interest Excav",
+      -12155.2
+    ],
+    [
+      null,
+      "Total Non-current Liabilities",
+      0
+    ],
+    [
+      "Total Liabilities",
+      null,
+      0
+    ],
+    [
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      "Net Assets",
+      0
+    ],
+    [
+      null,
+      null,
+      null
+    ],
+    [
+      "Equity",
+      null,
+      null
+    ],
+    [
+      null,
+      "Current Year Earnings",
+      143350.53
+    ],
+    [
+      null,
+      "Retained Earnings",
+      20110.83
+    ],
+    [
+      null,
+      "Subscribed Units",
+      1000
+    ],
+    [
+      "Total Equity",
+      null,
+      0
+    ]
+  ]
+}
