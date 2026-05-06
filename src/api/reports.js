@@ -51,24 +51,29 @@ export async function markReportComplete(reportId) {
 // -------------------------------------------------------
 // Financials
 // -------------------------------------------------------
+//
+// Sprint 17 #17C — read functions accept an `accounting_basis` arg and filter
+// the Supabase query by it. Default 'cash' to match the new app default.
 
-export async function getFinancialsForMonth(reportMonth) {
+export async function getFinancialsForMonth(reportMonth, basis = 'cash') {
   const { data, error } = await supabase
     .from('financials_monthly')
     .select('*')
     .eq('report_month', reportMonth)
+    .eq('accounting_basis', basis)
     .single()
 
   if (error && error.code !== 'PGRST116') throw error
   return data
 }
 
-export async function getFinancialsRange(fromMonth, toMonth) {
+export async function getFinancialsRange(fromMonth, toMonth, basis = 'cash') {
   const { data, error } = await supabase
     .from('financials_monthly')
     .select('*')
     .gte('report_month', fromMonth)
     .lte('report_month', toMonth)
+    .eq('accounting_basis', basis)
     .order('report_month', { ascending: true })
 
   if (error) throw error
@@ -90,23 +95,25 @@ export async function upsertFinancials(reportId, reportMonth, financialsData) {
 // Balance Sheet
 // -------------------------------------------------------
 
-export async function getBalanceSheetForMonth(reportMonth) {
+export async function getBalanceSheetForMonth(reportMonth, basis = 'cash') {
   const { data, error } = await supabase
     .from('balance_sheet_monthly')
     .select('*')
     .eq('report_month', reportMonth)
+    .eq('accounting_basis', basis)
     .single()
 
   if (error && error.code !== 'PGRST116') throw error
   return data
 }
 
-export async function getBalanceSheetRange(fromMonth, toMonth) {
+export async function getBalanceSheetRange(fromMonth, toMonth, basis = 'cash') {
   const { data, error } = await supabase
     .from('balance_sheet_monthly')
     .select('*')
     .gte('report_month', fromMonth)
     .lte('report_month', toMonth)
+    .eq('accounting_basis', basis)
     .order('report_month', { ascending: true })
 
   if (error) throw error
@@ -128,11 +135,12 @@ export async function upsertBalanceSheet(reportId, reportMonth, bsData) {
 // Debtors
 // -------------------------------------------------------
 
-export async function getDebtorsForMonth(reportMonth) {
+export async function getDebtorsForMonth(reportMonth, basis = 'cash') {
   const { data, error } = await supabase
     .from('debtors_monthly')
     .select('*')
     .eq('report_month', reportMonth)
+    .eq('accounting_basis', basis)
     .order('total_outstanding', { ascending: false })
 
   if (error) throw error
