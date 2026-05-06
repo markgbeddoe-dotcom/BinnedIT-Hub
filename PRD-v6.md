@@ -39,18 +39,38 @@ Binned-IT Hub v6 continues the build-out of the complete end-to-end skip bin hir
 v4 was a _financial reporting dashboard_ with operations as an afterthought. v5/v6: **operations is the primary interface**. The home screen is the dispatch board showing today's jobs. Financial reporting is still here — now it's a tab within a broader operational platform rather than the whole product.
 
 **What this platform will do when complete:**
-- A customer calls or books online → booking created automatically
-- Booking triggers availability check, auto-schedules to a truck, confirms to customer via SMS/email
-- Driver opens their mobile run sheet, sees jobs for the day with navigation
-- Driver photographs bin, captures tip docket via OCR, records weight
-- AI checks bin contents photos for hazardous materials or heavy load risk
-- Job completion triggers automatic Xero invoice creation
-- Overdue invoices trigger automated follow-up sequence — with full legal letter generation up to statutory demand
-- Mark sees live job costing per job as it happens
-- Weekly AI intelligence report surfaces pricing changes needed, cost shifts, competitor intel
-- All historical reporting (financial P&L, AR aging, margins, compliance) remains fully intact
 
-This is the single source of truth for running Binned-IT from first customer contact to final payment, with intelligence layered on top to make every decision faster and better.
+Status legend: ✅ Built (in production) · 🟡 Partial (some pieces live, gap noted) · ⏳ Roadmap (planned, not started)
+
+- ✅ A customer calls or books online → booking created automatically *(CRMBookingsPage + `/book` + `/embed/:slug` — Sprint 8/9, white-label widget Phase 2.5)*
+- ✅ Booking triggers availability check, auto-schedules to a truck, confirms to customer via SMS/email *(Twilio SMS Sprint 13 #21; Resend email Sprint 13 #10)*
+- ✅ Driver opens their mobile run sheet, sees jobs for the day with navigation *(Driver PWA Sprint 11D + 12A; state-machine v1 Sprint 12 #18)*
+- 🟡 Driver photographs bin, captures tip docket via OCR, records weight — **photo capture and bin photos are live (`PhotoCapture.jsx`, photo-gate Sprint 12 #18); OCR for tip dockets / fuel receipts / maintenance records is ⏳ Phase 4 (no Vision API integration yet)**
+- ⏳ AI checks bin contents photos for hazardous materials or heavy load risk — **Phase 4 (Roadmap). Manual `HazardReport.jsx` form exists; the photo-upload pipeline matured in Sprint 12 #18 so this is unblocked but not started. No Vision API integration.**
+- 🟡 Job completion triggers automatic Xero invoice creation — **`api/xero-invoice.js` and `api/invoice-generate.js` endpoints exist; gated by `XERO_WRITE_ENABLED` env var which defaults to `false`. No UI/cron hook on job-status change yet. Phase 4.**
+- ✅ Overdue invoices trigger automated follow-up sequence — with full legal letter generation up to statutory demand *(Phase 2.5; Resend dispatch Sprint 13 #10; postal letter dispatch 🟡 Partial — endpoint + queue table exist, no provider wired)*
+- 🟡 Mark sees live job costing per job as it happens — **`JobCostingWidget` wired into Dispatch (Sprint 14 #19); per-bin loss-making detection live (Sprint 14 #15). Live OPEX/wages capture pipeline still pending real cost ingestion at the job level.**
+- 🟡 Weekly AI intelligence report surfaces pricing changes needed, cost shifts, competitor intel — **`api/weekly-digest.js` cron runs Mondays; competitor pricing matrix retained from Hub v2.2; web-search competitor intelligence (live Bing/Google scrape) is ⏳ Phase 5 — no `BING_SEARCH_API_KEY` integration in code.**
+- ✅ All historical reporting (financial P&L, AR aging, margins, compliance) remains fully intact *(Hub v2.2 dashboard tabs retained; Xero data integrity rewrite Sprints 10, 14, 15)*
+- ⏳ Travel optimisation / route planning — **Phase 5 (Roadmap). Needs Mapbox or Google route-engine integration; not started.**
+- ⏳ Wages / overtime / rostering — **Phase 4 (Roadmap). No `clock_in`/`timesheet`/`roster` table or component in codebase today.**
+
+This is the single source of truth for running Binned-IT from first customer contact to final payment, with intelligence layered on top to make every decision faster and better. **What's live today (May 2026) is the operations spine — bookings, dispatch, driver mobile app v1, Xero read sync, collections engine, SMS/email confirmations, dashboard reporting. The AI/OCR/route/wages/auto-invoice rails are scoped above as Phase 4–5 roadmap and are not yet shipped.** The PRD is honest about both halves: what users can rely on today vs. what they will be able to rely on at full maturity.
+
+---
+
+## 1.1 Recent Sprint History (Sprints 10–15)
+
+One-line bullet per sprint covering what closed in each. Source: `docs/audits/2026-05-06/FIXES-NEEDED.md` Sprint 10/11 status blocks plus master `git log` Sprints 12–15. Sprints 1–9 are summarised in §6.1 (Hub v2.2) and §15 (Phase 2.5 CRM/Collections).
+
+- **Sprint 10 (Unblock — closed 2026-05-07):** Xero data integrity rewrite (Sprint 10 #1–#4: revenue classifier, sign-flip on credits, cash-balance matcher, AR sync re-enabled with per-debtor write); Investor RBAC sandbox (#12); legal-letter ABN/BSB sourced from `platform_settings` with UI gate (#11); Collections "Send" UX honesty interim (#10); Wizard side-menu entry (#20). 106/106 Vitest passing.
+- **Sprint 11 ("Make it usable" — closed 2026-05-07):** Plain-English dashboard tab labels (#22); LoginPage polish; MobileNav Wizard reachable (Load Data tile); Settings → Company Identity editor (Sprint 11; closes Sprint 10 #11 follow-up); Bin-type canonicalization JS layer (#14 — 58 Vitest assertions, SQL CHECK deferred to Sprint 14); Driver PWA separate manifest (#16 — Sprint 11D, separate SW deferred to Sprint 12). 164/164 Vitest passing.
+- **Sprint 12 (Driver app v1):** Driver offline write queue library + tests (#17); separate service worker for `/driver` scope (#16 follow-on, Sprint 12A); driver job state machine v1 — Arrived state + photo gate + checklist gate (#18); driver mobile-fit polish — `useBreakpoint`, safe-area-insets, max-width on desktop (#32). Offline queue wiring into all driver components is partial.
+- **Sprint 13 (Real customer comms):** Real Twilio SMS booking confirmation send (#21); Resend email dispatch wired into Collections "Send" (#10); postal letter dispatch queue + endpoint stub (#10 follow-up — provider not yet wired).
+- **Sprint 14 (Pricing + costing):** Canonical `bin_type` SQL CHECK constraint + normalize backfill migration (#14 — backfill is one operator step away); JobCostingWidget wired into DispatchBoard cards (#19); derived per-bin loss detection + cost-detail schema (#15); money rounding helpers + competitor rate name normalization (#29, #30).
+- **Sprint 15 (Xero + mobile UX hardening):** Split `opex_wages`/`opex_super`, harden cash matcher, BS column coverage in `xero-mapper` (#24, #26, #28, #31); mobile dashboard tab picker drawer — all 12 tabs reachable on mobile (#23).
+
+**Sprint 16 (in flight):** Truth-up of PRD-v6 §1 status (this commit, #38), continuing P1/P2 backlog burn-down from `FIXES-NEEDED.md`.
 
 ---
 
@@ -246,7 +266,7 @@ All of the following is **complete and retained in v6** — nothing is removed:
 | White-label embeddable booking widget | Complete (new in v6) |
 | Audit log (immutable change trail) | Complete |
 | Team & Staff management page | Complete |
-| Driver app (mobile run sheet) | Complete |
+| Driver app (mobile run sheet) | ✅ Complete v1 (Sprint 12 #18 — Arrived state + photo gate + checklist gate; offline write queue library Sprint 12 #17, wiring into all components 🟡 Partial) |
 | Xero sync — improved 404 handling and JWT verification | Complete (new in v6) |
 | UI contrast improvements (bg, borders, text tokens) | Complete (new in v6) |
 
