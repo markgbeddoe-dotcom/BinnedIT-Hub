@@ -3,6 +3,7 @@ import { B, fontHead, fontBody, fmtFull } from '../theme'
 import { useBreakpoint } from '../hooks/useBreakpoint'
 import { useCollectionsSummary, useOverdueInvoices, useCreateCollectionsEvent, useEscalateInvoice } from '../hooks/useCollections'
 import { generateCollectionsLetter, generateSecurityOverAssetsLetter } from '../lib/legalTemplates'
+import { useCompanyConfig } from '../hooks/useCompanyConfig'
 
 // ── Fallback overdue invoices when Supabase unavailable ───────────────────────
 const FALLBACK_OVERDUE = [
@@ -38,7 +39,11 @@ function LevelBadge({ level }) {
 function LetterModal({ invoice, level, customer, onClose, onSend }) {
   const [sending, setSending] = useState(false)
   const [method, setMethod] = useState('email')
-  const letter = useMemo(() => generateCollectionsLetter(level, invoice, customer, null), [level, invoice, customer])
+  const { company, hasPlaceholders } = useCompanyConfig()
+  const letter = useMemo(
+    () => generateCollectionsLetter(level, invoice, customer, null, company),
+    [level, invoice, customer, company]
+  )
 
   const handleSend = async () => {
     setSending(true)
@@ -62,6 +67,15 @@ function LetterModal({ invoice, level, customer, onClose, onSend }) {
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer' }}>✕</button>
         </div>
 
+        {/* Placeholder warning — letters are legally defective until ABN/BSB configured */}
+        {hasPlaceholders && (
+          <div style={{ padding:'10px 20px', background:'#FFF4E6', borderBottom:`2px solid ${B.amber}`, color:'#7A4F00', fontSize:12, lineHeight:1.5 }}>
+            <strong>⚠ Company config not set.</strong> This letter contains placeholder ABN / ACN / BSB values
+            (<code>{company.abn}</code> etc.) and would be legally defective if sent. Configure real values
+            in <strong>Settings → Company Identity</strong> before recording any send action.
+          </div>
+        )}
+
         {/* Letter body */}
         <div style={{ flex:1, overflowY:'auto', padding:'24px 28px', fontFamily:'"Courier New",monospace', fontSize:12, lineHeight:1.8, color:'#000', whiteSpace:'pre-wrap', background:'#fafafa' }}>
           {letter}
@@ -72,14 +86,32 @@ function LetterModal({ invoice, level, customer, onClose, onSend }) {
           <div style={{ flex:1 }}>
             <label style={{ fontSize:11, fontFamily:fontHead, fontWeight:700, color:'#666', textTransform:'uppercase', marginRight:8 }}>Delivery Method:</label>
             <select value={method} onChange={e=>setMethod(e.target.value)} style={{ border:'1px solid #ccc', borderRadius:6, padding:'6px 10px', fontSize:13, fontFamily:fontBody }}>
+              <option value="manual">Mark as sent (manual)</option>
               <option value="email">Email</option>
               <option value="post">Registered Post</option>
               <option value="email_post">Email + Registered Post</option>
             </select>
+            {method !== 'manual' && (
+              <div style={{ fontSize:10, color:B.amber, marginTop:4 }}>
+                ⚠ Send actually only RECORDS the event — outbound dispatch (email/post) is not yet wired.
+                Use 'Mark as sent (manual)' if you've already sent the letter via your usual channel.
+              </div>
+            )}
           </div>
           <button onClick={()=>window.print()} style={{ background:'#eee', border:'1px solid #ccc', borderRadius:7, padding:'8px 16px', cursor:'pointer', fontFamily:fontHead, fontSize:12 }}>🖨 Print</button>
-          <button onClick={handleSend} disabled={sending} style={{ background:levelCfg.color, border:'none', borderRadius:7, padding:'8px 18px', cursor:'pointer', fontFamily:fontHead, fontSize:12, fontWeight:700, color:'#fff', opacity:sending?0.7:1 }}>
-            {sending ? 'Recording…' : `✓ Record & Send — Level ${level}`}
+          <button
+            onClick={handleSend}
+            disabled={sending || hasPlaceholders}
+            title={hasPlaceholders ? 'Configure company ABN/BSB in Settings before sending' : ''}
+            style={{
+              background: hasPlaceholders ? '#999' : levelCfg.color,
+              border:'none', borderRadius:7, padding:'8px 18px',
+              cursor: hasPlaceholders ? 'not-allowed' : 'pointer',
+              fontFamily:fontHead, fontSize:12, fontWeight:700, color:'#fff',
+              opacity:sending?0.7:1,
+            }}
+          >
+            {hasPlaceholders ? '⚠ Config required' : sending ? 'Recording…' : `✓ Record — Level ${level}`}
           </button>
         </div>
       </div>
@@ -89,7 +121,11 @@ function LetterModal({ invoice, level, customer, onClose, onSend }) {
 
 // ── Security Letter Modal ─────────────────────────────────────────────────────
 function SecurityLetterModal({ customer, onClose }) {
-  const letter = useMemo(() => generateSecurityOverAssetsLetter(customer, customer?.credit_limit), [customer])
+  const { company } = useCompanyConfig()
+  const letter = useMemo(
+    () => generateSecurityOverAssetsLetter(customer, customer?.credit_limit, company),
+    [customer, company]
+  )
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.65)', zIndex:800, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
       <div style={{ background:'#fff', borderRadius:12, width:'100%', maxWidth:760, maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.5)' }}>

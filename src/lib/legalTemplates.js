@@ -1,17 +1,41 @@
-// ── Legal document generators for Binned-IT Pty Ltd ──────────────────────────
+// ── Legal document generators for SkipSync ───────────────────────────────────
 // All templates comply with Victorian / Commonwealth law as at 2026.
 // Review with a solicitor before first use. Not legal advice.
+//
+// Company identity (ABN, ACN, BSB, etc.) MUST be supplied by the caller via
+// the `company` argument (sourced from platform_settings via useCompanyConfig).
+// If the caller passes nothing, the placeholders below kick in — these will
+// produce a LEGALLY DEFECTIVE document, so every consumer must gate any "send"
+// action on hasPlaceholders === false (see useCompanyConfig.js).
 
-const COMPANY = {
+const PLACEHOLDER_COMPANY = {
   name: 'Binned-IT Pty Ltd',
-  abn: '57 123 456 789',        // Replace with real ABN
-  acn: '123 456 789',           // Replace with real ACN
+  abn: '57 123 456 789',        // PLACEHOLDER — must override via platform_settings
+  acn: '123 456 789',           // PLACEHOLDER
   address: '12 Industrial Way, Seaford VIC 3198',
-  phone: '03 9000 0000',        // Replace with real number
+  phone: '03 9000 0000',        // PLACEHOLDER
   email: 'accounts@binnedit.com.au',
-  bsb: '063-000',               // Replace with real BSB
-  accountNumber: '1234 5678',   // Replace with real account number
-  penaltyInterestRate: '10',    // Current Vic penalty interest rate — check Vic AG website
+  bsb: '063-000',               // PLACEHOLDER
+  account_number: '1234 5678',  // PLACEHOLDER
+  penalty_interest_rate: '10',  // Current Vic penalty interest rate — check Vic AG website
+}
+
+// Resolve effective company config: caller-provided wins; placeholders fill gaps.
+// Also accepts both `account_number` (snake_case, from platform_settings) and
+// `accountNumber` (camelCase, legacy) for backward compatibility.
+function resolveCompany(supplied) {
+  const c = supplied || {}
+  return {
+    name: c.name || PLACEHOLDER_COMPANY.name,
+    abn: c.abn || PLACEHOLDER_COMPANY.abn,
+    acn: c.acn || PLACEHOLDER_COMPANY.acn,
+    address: c.address || PLACEHOLDER_COMPANY.address,
+    phone: c.phone || PLACEHOLDER_COMPANY.phone,
+    email: c.email || PLACEHOLDER_COMPANY.email,
+    bsb: c.bsb || PLACEHOLDER_COMPANY.bsb,
+    accountNumber: c.account_number || c.accountNumber || PLACEHOLDER_COMPANY.account_number,
+    penaltyInterestRate: c.penalty_interest_rate || c.penaltyInterestRate || PLACEHOLDER_COMPANY.penalty_interest_rate,
+  }
 }
 
 const fmtDate = d => new Date(d||Date.now()).toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})
@@ -19,7 +43,8 @@ const fmtAmt = v => `$${parseFloat(v||0).toLocaleString('en-AU',{minimumFraction
 
 // ── Account Terms & Conditions ────────────────────────────────────────────────
 
-export function generateAccountContract(customer, guarantor) {
+export function generateAccountContract(customer, guarantor, company) {
+  const COMPANY = resolveCompany(company)
   const date = fmtDate()
   const terms = customer?.payment_terms_days || 14
   const limit = customer?.credit_limit > 0 ? fmtAmt(customer.credit_limit) : 'As approved in writing'
@@ -120,7 +145,8 @@ For enquiries: ${COMPANY.email} | ${COMPANY.phone}
 
 // ── Director's Personal Guarantee ─────────────────────────────────────────────
 
-export function generateDirectorGuarantee(customer, guarantor) {
+export function generateDirectorGuarantee(customer, guarantor, company) {
+  const COMPANY = resolveCompany(company)
   const date = fmtDate()
   const limit = customer?.credit_limit > 0 ? fmtAmt(customer.credit_limit) : 'all moneys now or in the future owed'
 
@@ -220,7 +246,8 @@ This is a legally binding document. By signing, you accept personal liability fo
 
 // ── Collections Letters ───────────────────────────────────────────────────────
 
-export function generateCollectionsLetter(level, invoice, customer, contact) {
+export function generateCollectionsLetter(level, invoice, customer, contact, company) {
+  const COMPANY = resolveCompany(company)
   const today = fmtDate()
   const contactName = contact?.name || customer?.name || 'Sir/Madam'
   const invNum = invoice?.invoice_number || 'MULTIPLE'
@@ -454,7 +481,8 @@ This notice is a formal legal document. The matters described will proceed as st
 
 // ── Security Over Assets Letter ───────────────────────────────────────────────
 
-export function generateSecurityOverAssetsLetter(customer, creditLimit) {
+export function generateSecurityOverAssetsLetter(customer, creditLimit, company) {
+  const COMPANY = resolveCompany(company)
   const date = fmtDate()
   const limit = fmtAmt(creditLimit || customer?.credit_limit || 0)
 

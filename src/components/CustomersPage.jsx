@@ -13,6 +13,7 @@ import {
 } from '../hooks/useCustomers'
 import { useCollectionsEvents } from '../hooks/useCollections'
 import { generateAccountContract, generateDirectorGuarantee } from '../lib/legalTemplates'
+import { useCompanyConfig } from '../hooks/useCompanyConfig'
 
 // ── Fallback data ─────────────────────────────────────────────────────────────
 const FALLBACK = [
@@ -558,6 +559,7 @@ function ContractTab({ customer, customerId }) {
   const { data: contracts = [] } = useAccountContracts(customerId)
   const { data: directors = [] } = useCustomerDirectors(customerId)
   const createContract = useCreateAccountContract()
+  const { company, hasPlaceholders } = useCompanyConfig()
   const [generating, setGenerating] = useState(false)
   const [preview, setPreview] = useState(null)
 
@@ -566,9 +568,9 @@ function ContractTab({ customer, customerId }) {
     try {
       const guarantor = directors.find(d=>d.is_guarantor)
       const content = type === 'contract'
-        ? generateAccountContract(customer, guarantor)
-        : generateDirectorGuarantee(customer, guarantor)
-      setPreview({ type, content })
+        ? generateAccountContract(customer, guarantor, company)
+        : generateDirectorGuarantee(customer, guarantor, company)
+      setPreview({ type, content, hasPlaceholders })
     } finally {
       setGenerating(false)
     }
