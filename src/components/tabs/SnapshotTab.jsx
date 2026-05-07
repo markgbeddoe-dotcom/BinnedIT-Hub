@@ -174,8 +174,16 @@ export default function SnapshotTab({ reportId, reportMonth, selectedMonth, mont
             ].map((item, i) => {
               const diff = item.aVal - item.bVal;
               const pctChange = item.bVal !== 0 ? ((item.aVal / item.bVal) - 1) * 100 : 0;
+              // Sprint 18 #M3 — Playwright e2e (e2e/cash-accrual-toggle.spec.js)
+              // needs a stable selector for the Net Profit tile so it can
+              // assert against the cash vs accrual basis swing.
+              const tileTestId = item.label === 'Net Profit' ? 'kpi-net-profit'
+                : item.label === 'Revenue' ? 'kpi-revenue'
+                : item.label === 'Gross Profit' ? 'kpi-gross-profit'
+                : item.label === 'GM %' ? 'kpi-gross-margin-pct'
+                : undefined;
               return (
-                <div key={i} style={{ background: B.bg, borderRadius: 8, padding: '12px 14px', border: `1px solid ${B.cardBorder}` }}>
+                <div key={i} data-testid={tileTestId} style={{ background: B.bg, borderRadius: 8, padding: '12px 14px', border: `1px solid ${B.cardBorder}` }}>
                   <div style={{ fontSize: 10, color: B.textMuted, textTransform: 'uppercase', marginBottom: 6 }}>{item.label}</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <div>

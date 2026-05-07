@@ -310,10 +310,18 @@ export default function App() {
       opacity: basisLocked && !active ? 0.55 : 1,
       transition: 'background 0.15s, color 0.15s',
     });
+    // Sprint 18 #M3: data-testid hooks for the Playwright e2e suite
+    // (e2e/cash-accrual-toggle.spec.js). Wrapper testid varies by viewport so
+    // selectors are unambiguous; per-button testids let assertions click
+    // either basis without race conditions on aria-pressed.
+    const wrapperTestId = isMobile ? 'basis-toggle-mobile' : 'basis-toggle-desktop';
     return (
       <div
         title={basisLocked ? lockedTitle : undefined}
         aria-label="Accounting basis"
+        data-testid={wrapperTestId}
+        data-basis={basis}
+        data-basis-locked={basisLocked ? 'true' : 'false'}
         style={{
           display: 'inline-flex',
           background: '#222',
@@ -328,6 +336,7 @@ export default function App() {
           onClick={() => setBasis('cash')}
           disabled={basisLocked}
           aria-pressed={basis === 'cash'}
+          data-testid="basis-toggle-cash"
           style={optStyle(basis === 'cash')}
         >Cash</button>
         <button
@@ -335,6 +344,7 @@ export default function App() {
           onClick={() => setBasis('accrual')}
           disabled={basisLocked}
           aria-pressed={basis === 'accrual'}
+          data-testid="basis-toggle-accrual"
           style={optStyle(basis === 'accrual')}
         >Accrual</button>
       </div>
@@ -483,7 +493,7 @@ export default function App() {
                 {/* Sprint 17 #17D — small "(accrual basis)" pill on the active tab so
                     the user knows they've switched off the cash default. */}
                 {active && basis === 'accrual' && (
-                  <span style={{
+                  <span data-testid="basis-pill-accrual" style={{
                     background:'#0A0A0A',color:B.yellow,fontFamily:fontHead,fontSize:9,fontWeight:700,
                     letterSpacing:'0.06em',textTransform:'uppercase',padding:'2px 6px',borderRadius:10,lineHeight:1
                   }}>Accrual basis</span>
@@ -497,7 +507,7 @@ export default function App() {
             so the user is reminded they're off the cash default. */}
         {isMobile && basis === 'accrual' && (
           <div style={{marginBottom:12,display:'flex',justifyContent:'center'}} className="no-print">
-            <span style={{
+            <span data-testid="basis-pill-accrual" style={{
               background:B.yellow,color:'#0A0A0A',fontFamily:fontHead,fontSize:10,fontWeight:700,
               letterSpacing:'0.08em',textTransform:'uppercase',padding:'4px 10px',borderRadius:12,lineHeight:1
             }}>Accrual basis</span>
