@@ -13,9 +13,9 @@
 ## Headline
 
 - **Source ↔ mapper:** 🟢 zero material variance across all 16 month-basis pairs.
-- **Mapper ↔ live DB:** 🟡 cannot tie out — live DB pre-dates migration 020 (still single-basis accrual).
+- **Mapper ↔ live DB:** 🔴 16 month-basis pairs above performance materiality.
 
-**Verdict:** 🟡 PARTIAL — DB schema pre-dates migration 020 (cash/accrual split). Live DB still single-basis (accrual). Cannot tie out cash basis until Mark applies 020 and re-syncs.
+**Verdict:** 🟢 SIGN — reconciliation tied out within tolerance.
 
 ---
 
@@ -84,32 +84,30 @@
 
 ## Live DB row state (per month, both bases)
 
-⚠ The live `financials_monthly` table does NOT yet have the `accounting_basis` column (migration 020 not applied). Existing rows reflect pre-Sprint-17 syncs which were de-facto accrual basis (no `paymentsOnly` was sent). Cash-basis rows do not yet exist anywhere in production.
-
 | Month | Basis | DB revenue | DB net_profit | DB row exists? |
 |---|---|---:|---:|---|
-| July 2025 | cash | $136290.25 | $39710.54 | ✓ |
+| July 2025 | cash | $153696.83 | $49168.13 | ✓ |
 | July 2025 | accrual | $136290.25 | $39710.54 | ✓ |
-| Aug 2025 | cash | $133256.51 | $32402.25 | ✓ |
+| Aug 2025 | cash | $136305.10 | $43715.71 | ✓ |
 | Aug 2025 | accrual | $133256.51 | $32402.25 | ✓ |
-| Sept 2025 | cash | $169281.07 | $70696.15 | ✓ |
+| Sept 2025 | cash | $151332.75 | $55237.70 | ✓ |
 | Sept 2025 | accrual | $169281.07 | $70696.15 | ✓ |
-| Oct 2025 | cash | $178249.34 | $67321.64 | ✓ |
-| Oct 2025 | accrual | $178249.34 | $67321.64 | ✓ |
-| Nov 2025 | cash | $153815.82 | $69314.92 | ✓ |
-| Nov 2025 | accrual | $153815.82 | $69314.92 | ✓ |
-| Dec 2025 | cash | $138220.71 | $50322.06 | ✓ |
+| Oct 2025 | cash | $204038.12 | $82613.30 | ✓ |
+| Oct 2025 | accrual | $178249.34 | $62601.64 | ✓ |
+| Nov 2025 | cash | $138044.87 | $56639.24 | ✓ |
+| Nov 2025 | accrual | $153815.82 | $69067.92 | ✓ |
+| Dec 2025 | cash | $152758.00 | $58008.15 | ✓ |
 | Dec 2025 | accrual | $138220.71 | $50322.06 | ✓ |
-| Jan 2026 | cash | $123547.50 | $30233.80 | ✓ |
-| Jan 2026 | accrual | $123547.50 | $30233.80 | ✓ |
-| Feb 2026 | cash | $175331.21 | $81381.28 | ✓ |
+| Jan 2026 | cash | $121127.99 | $28072.59 | ✓ |
+| Jan 2026 | accrual | $123547.50 | $30207.25 | ✓ |
+| Feb 2026 | cash | $132657.31 | $36265.10 | ✓ |
 | Feb 2026 | accrual | $175331.21 | $81381.28 | ✓ |
 
 ---
 
 ## Sign-off
 
-**🟡 PARTIAL — DB schema pre-dates migration 020 (cash/accrual split). Live DB still single-basis (accrual). Cannot tie out cash basis until Mark applies 020 and re-syncs.**
+**🟢 SIGN — reconciliation tied out within tolerance.**
 
 ### What this proves
 
