@@ -33,16 +33,25 @@ const COMPANY_FIELDS = [
   { key: 'company.penalty_interest_rate',  label: 'Penalty interest rate %', placeholder: '10' },
 ];
 
+// Sprint 18 #L2 — letterhead logo upload
+// Bucket name and constraints — kept here as constants so the SQL migration
+// and the React UI stay in lockstep. If you change the bucket name you must
+// also update supabase/migrations/021_company_assets_storage.sql.
+const LOGO_BUCKET = 'company-assets';
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;        // 2 MB
+const LOGO_ACCEPT_MIME = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'];
+const LOGO_ACCEPT_EXT = ['png', 'jpg', 'jpeg', 'svg'];
+
 function CompanyIdentityEditor() {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  const { user, isOwner } = useAuth();
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['platform-settings-company'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('platform_settings')
         .select('key, value')
-        .in('key', COMPANY_FIELDS.map(f => f.key));
+        .in('key', [...COMPANY_FIELDS.map(f => f.key), 'company.logo_url']);
       if (error) throw error;
       return data || [];
     },
@@ -53,12 +62,25 @@ function CompanyIdentityEditor() {
     return Object.fromEntries(COMPANY_FIELDS.map(f => [f.key, map[f.key] || '']));
   }, [rows]);
 
+  // Logo URL lives in the same platform_settings table but isn't part of the
+  // text-input grid — it has its own picker. We pull it out separately so the
+  // dirty/save logic for the text fields stays clean.
+  const initialLogoUrl = useMemo(() => {
+    const row = rows.find(r => r.key === 'company.logo_url');
+    return row?.value || '';
+  }, [rows]);
+
   const [form, setForm] = useState(initial);
   const [savedAt, setSavedAt] = useState(null);
   const [saveError, setSaveError] = useState(null);
+  const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState(null);
+  const [logoStatus, setLogoStatus] = useState(null); // null | 'uploaded' | 'removed'
 
   // Reset local form whenever the loaded rows change (e.g. on first fetch).
   useEffect(() => { setForm(initial); }, [initial]);
+  useEffect(() => { setLogoUrl(initialLogoUrl); }, [initialLogoUrl]);
 
   const dirty = COMPANY_FIELDS.some(f => (form[f.key] || '') !== (initial[f.key] || ''));
 
@@ -78,6 +100,106 @@ function CompanyIdentityEditor() {
     setSavedAt(new Date().toISOString());
     qc.invalidateQueries({ queryKey: ['platform-settings-company'] });
     qc.invalidateQueries({ queryKey: ['company-config'] }); // useCompanyConfig hook key
+  };
+
+  // ── Logo upload (Sprint 18 #L2) ──────────────────────────────────────────
+  // Uploads to Supabase Storage bucket `company-assets`. The bucket SHOULD be
+  // pre-created via migration 021; if for any reason it doesn't exist (e.g.
+  // tenant skipped the migration), we attempt to create it on the fly — but
+  // only if the caller is the owner, since `storage.buckets` writes are
+  // gated by RLS in our migrations. The resulting public URL is then saved
+  // into `platform_settings.company.logo_url` via the existing upsert path.
+  const handleLogoPick = async (file) => {
+    setLogoError(null);
+    setLogoStatus(null);
+    if (!file) return;
+
+    if (!LOGO_ACCEPT_MIME.includes(file.type)) {
+      setLogoError(`Unsupported file type "${file.type || 'unknown'}" — please upload PNG, JPG or SVG.`);
+      return;
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      const mb = (file.size / 1024 / 1024).toFixed(1);
+      setLogoError(`File is ${mb} MB — max allowed is 2 MB.`);
+      return;
+    }
+
+    setLogoUploading(true);
+    try {
+      // Tenant-scoped path — even single-tenant deployments benefit from this
+      // because it leaves room for the white-label tenants to keep their own
+      // letterhead under their own folder. We use the user id as a stable
+      // tenant proxy until proper tenants land in storage RLS.
+      const tenantId = user?.id || 'default';
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      const safeExt = LOGO_ACCEPT_EXT.includes(ext) ? ext : 'png';
+      const path = `${tenantId}/logo.${safeExt}`;
+
+      // Try the upload first — if the bucket is missing we'll get a clear
+      // error and can attempt to create it. We treat the bucket-missing case
+      // as a one-time bootstrap rather than failing.
+      let { error: upErr } = await supabase.storage
+        .from(LOGO_BUCKET)
+        .upload(path, file, { upsert: true, contentType: file.type, cacheControl: '3600' });
+
+      if (upErr && /bucket.*not\s*found/i.test(upErr.message || '')) {
+        if (!isOwner) {
+          throw new Error('Storage bucket "company-assets" is missing. Ask the owner to apply migration 021 or contact support.');
+        }
+        // Bootstrap the bucket. createBucket throws if the caller lacks
+        // permission — which is fine, the user sees a clear error.
+        const { error: createErr } = await supabase.storage.createBucket(LOGO_BUCKET, {
+          public: true,
+          fileSizeLimit: LOGO_MAX_BYTES,
+        });
+        if (createErr) throw createErr;
+        // Retry the upload after creating the bucket.
+        const retry = await supabase.storage
+          .from(LOGO_BUCKET)
+          .upload(path, file, { upsert: true, contentType: file.type, cacheControl: '3600' });
+        upErr = retry.error;
+      }
+      if (upErr) throw upErr;
+
+      const { data: pub } = supabase.storage.from(LOGO_BUCKET).getPublicUrl(path);
+      const publicUrl = pub?.publicUrl;
+      if (!publicUrl) throw new Error('Upload succeeded but no public URL was returned. Check storage bucket privacy.');
+
+      // Cache-bust so a re-upload of the same path is reflected immediately.
+      const url = `${publicUrl}?t=${Date.now()}`;
+
+      const { error: psErr } = await supabase.from('platform_settings').upsert({
+        key: 'company.logo_url',
+        value: url,
+        updated_by: user?.id || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'key' });
+      if (psErr) throw psErr;
+
+      setLogoUrl(url);
+      setLogoStatus('uploaded');
+      qc.invalidateQueries({ queryKey: ['platform-settings-company'] });
+      qc.invalidateQueries({ queryKey: ['company-config'] });
+    } catch (e) {
+      setLogoError(e?.message || 'Upload failed — please try again.');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleLogoRemove = async () => {
+    setLogoError(null);
+    setLogoStatus(null);
+    try {
+      const { error } = await supabase.from('platform_settings').delete().eq('key', 'company.logo_url');
+      if (error) throw error;
+      setLogoUrl('');
+      setLogoStatus('removed');
+      qc.invalidateQueries({ queryKey: ['platform-settings-company'] });
+      qc.invalidateQueries({ queryKey: ['company-config'] });
+    } catch (e) {
+      setLogoError(e?.message || 'Remove failed.');
+    }
   };
 
   const PLACEHOLDER_ABN = '57 123 456 789';
@@ -105,6 +227,99 @@ function CompanyIdentityEditor() {
           Letters cannot be dispatched until all three are configured with real values.
         </div>
       )}
+
+      {/* ── Letterhead logo (Sprint 18 #L2) ────────────────────────────── */}
+      <div style={{
+        display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap',
+        background: B.bg, border: `1px solid ${B.cardBorder}`, borderRadius: 10,
+        padding: '14px 16px', marginBottom: 16,
+      }}>
+        <div style={{
+          width: 140, height: 80, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: '#fff',
+          border: logoUrl ? `1px solid ${B.cardBorder}` : `2px dashed ${B.textMuted}`,
+          borderRadius: 8, overflow: 'hidden',
+        }}>
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt="Company logo"
+              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+            />
+          ) : (
+            <div style={{ fontSize: 10, color: B.textMuted, textAlign: 'center', padding: 8, fontFamily: fontHead, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              No logo<br />uploaded
+            </div>
+          )}
+        </div>
+
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontFamily: fontHead, fontSize: 12, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+            Letterhead Logo
+          </div>
+          <div style={{ fontSize: 12, color: B.textMuted, marginBottom: 10, lineHeight: 1.5 }}>
+            Appears at the top of every collections letter. PNG, JPG or SVG, max 2&nbsp;MB.
+            Stored in Supabase Storage (<code>{LOGO_BUCKET}</code>) and served via a public URL.
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <label style={{
+              background: logoUploading ? B.cardBorder : B.yellow,
+              color: logoUploading ? B.textMuted : B.black,
+              border: 'none', borderRadius: 6, padding: '8px 16px',
+              fontFamily: fontHead, fontSize: 12, fontWeight: 700,
+              textTransform: 'uppercase', cursor: logoUploading ? 'wait' : 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}>
+              {logoUploading ? 'Uploading…' : (logoUrl ? 'Replace logo' : 'Upload logo')}
+              <input
+                type="file"
+                accept={LOGO_ACCEPT_MIME.join(',')}
+                style={{ display: 'none' }}
+                disabled={logoUploading}
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  // Reset the value so the same file can be re-picked after an error.
+                  e.target.value = '';
+                  handleLogoPick(f);
+                }}
+              />
+            </label>
+            {logoUrl && (
+              <button
+                type="button"
+                disabled={logoUploading}
+                onClick={handleLogoRemove}
+                style={{
+                  background: 'none', border: `1px solid ${B.red}60`,
+                  color: B.red, borderRadius: 6, padding: '8px 14px',
+                  fontFamily: fontHead, fontSize: 11, fontWeight: 700,
+                  textTransform: 'uppercase', cursor: 'pointer',
+                }}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+
+          {logoError && (
+            <div style={{ marginTop: 8, fontSize: 12, color: B.red }}>
+              ✗ {logoError}
+            </div>
+          )}
+          {logoStatus === 'uploaded' && !logoError && (
+            <div style={{ marginTop: 8, fontSize: 12, color: B.green, fontWeight: 600 }}>
+              ✓ Logo uploaded — it now appears on all generated letters.
+            </div>
+          )}
+          {logoStatus === 'removed' && !logoError && (
+            <div style={{ marginTop: 8, fontSize: 12, color: B.textMuted }}>
+              Logo removed. Letters will display the “Insert your logo here” placeholder until a new one is uploaded.
+            </div>
+          )}
+        </div>
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         {COMPANY_FIELDS.map(f => (

@@ -28,6 +28,10 @@ const PLACEHOLDERS = {
   bsb: '063-000',
   account_number: '1234 5678',
   penalty_interest_rate: '10',
+  // logo_url has NO placeholder fallback. When missing, the HTML letter
+  // template renders an "Insert your logo here" placeholder so the bookkeeper
+  // can see the gap. The empty string here keeps the merge logic simple.
+  logo_url: '',
 }
 
 const SETTING_KEYS = [
@@ -40,6 +44,7 @@ const SETTING_KEYS = [
   'company.bsb',
   'company.account_number',
   'company.penalty_interest_rate',
+  'company.logo_url',
 ]
 
 async function fetchCompanyConfig() {

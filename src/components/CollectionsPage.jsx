@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import { B, fontHead, fontBody, fmtFull } from '../theme'
 import { useBreakpoint } from '../hooks/useBreakpoint'
 import { useCollectionsSummary, useOverdueInvoices, useCreateCollectionsEvent, useEscalateInvoice } from '../hooks/useCollections'
-import { generateCollectionsLetter, generateSecurityOverAssetsLetter } from '../lib/legalTemplates'
+import { generateCollectionsLetter, generateCollectionsLetterHTML, generateSecurityOverAssetsLetter } from '../lib/legalTemplates'
 import { useCompanyConfig } from '../hooks/useCompanyConfig'
 import { supabase } from '../lib/supabase'
 
@@ -37,12 +37,31 @@ function LevelBadge({ level }) {
 }
 
 // ── Letter Preview Modal ──────────────────────────────────────────────────────
+// Renders the new HTML letter (Sprint 18 #L1) inside a sandboxed <iframe>.
+// We picked iframe srcDoc over dangerouslySetInnerHTML on purpose:
+//   • Full style isolation — the letter's inline <style> can't leak into the
+//     parent app (and vice-versa), so the Montserrat/Calibri rules don't fight
+//     theme.js tokens.
+//   • Print fidelity — calling iframe.contentWindow.print() prints ONLY the
+//     letter (with its @media print rules), not the surrounding modal chrome,
+//     which is the long-standing bug with window.print() on an outer page.
+//   • Cleaner Send wire — we still send the raw HTML string to the API so the
+//     downstream renderer sees the same thing the bookkeeper saw.
 function LetterModal({ invoice, level, customer, onClose, onSend }) {
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState(null)
   const [method, setMethod] = useState('email')
   const { company, hasPlaceholders } = useCompanyConfig()
-  const letter = useMemo(
+  const iframeRef = useRef(null)
+
+  // The HTML body gets sent (and stored on collections_events.letter_body) so
+  // the audit trail keeps a verbatim copy of what was dispatched. We also
+  // keep the plain-text version for email clients that prefer it.
+  const letterHtml = useMemo(
+    () => generateCollectionsLetterHTML(level, invoice, customer, null, company),
+    [level, invoice, customer, company]
+  )
+  const letterText = useMemo(
     () => generateCollectionsLetter(level, invoice, customer, null, company),
     [level, invoice, customer, company]
   )
@@ -51,11 +70,29 @@ function LetterModal({ invoice, level, customer, onClose, onSend }) {
     setSending(true)
     setSendError(null)
     try {
-      await onSend(letter, method)
+      // We pass the HTML to onSend — collections-send will pick the right
+      // representation. Plain text remains available via letterText for the
+      // "manual" path or for email clients that need a fallback.
+      await onSend(letterHtml, method, { letterText })
     } catch (err) {
       setSendError(err?.message || 'Send failed — please try again.')
     } finally {
       setSending(false)
+    }
+  }
+
+  const handlePrint = () => {
+    const win = iframeRef.current?.contentWindow
+    if (!win) {
+      // Fallback — printing the whole page is ugly but non-zero.
+      window.print()
+      return
+    }
+    try {
+      win.focus()
+      win.print()
+    } catch {
+      window.print()
     }
   }
 
@@ -64,7 +101,7 @@ function LetterModal({ invoice, level, customer, onClose, onSend }) {
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.65)', zIndex:800, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div style={{ background:'#fff', borderRadius:12, width:'100%', maxWidth:760, maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.5)' }}>
+      <div style={{ background:'#fff', borderRadius:12, width:'100%', maxWidth:860, maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.5)' }}>
         {/* Header */}
         <div style={{ padding:'14px 20px', borderBottom:'2px solid #ddd', display:'flex', justifyContent:'space-between', alignItems:'center', background:levelCfg.bg }}>
           <div>
@@ -85,9 +122,22 @@ function LetterModal({ invoice, level, customer, onClose, onSend }) {
           </div>
         )}
 
-        {/* Letter body */}
-        <div style={{ flex:1, overflowY:'auto', padding:'24px 28px', fontFamily:'"Courier New",monospace', fontSize:12, lineHeight:1.8, color:'#000', whiteSpace:'pre-wrap', background:'#fafafa' }}>
-          {letter}
+        {/* Logo missing soft-warning — not blocking, just a UX nudge */}
+        {!hasPlaceholders && !company.logo_url && (
+          <div style={{ padding:'8px 20px', background:'#F3F4F6', borderBottom:`1px solid ${B.cardBorder}`, color:'#4B5563', fontSize:11.5, lineHeight:1.5 }}>
+            ℹ No company logo uploaded — the letter shows an "Insert your logo here" placeholder.
+            Upload one in <strong>Settings → Company Identity</strong>.
+          </div>
+        )}
+
+        {/* Letter preview — iframe srcDoc keeps styles isolated */}
+        <div style={{ flex:1, overflow:'hidden', background:'#E5E7EB', padding:'12px' }}>
+          <iframe
+            ref={iframeRef}
+            title="Collections letter preview"
+            srcDoc={letterHtml}
+            style={{ width:'100%', height:'100%', border:'none', borderRadius:6, background:'#fff', boxShadow:'0 4px 16px rgba(0,0,0,0.12)' }}
+          />
         </div>
 
         {/* Actions */}
@@ -112,7 +162,7 @@ function LetterModal({ invoice, level, customer, onClose, onSend }) {
               </div>
             )}
           </div>
-          <button onClick={()=>window.print()} style={{ background:'#eee', border:'1px solid #ccc', borderRadius:7, padding:'8px 16px', cursor:'pointer', fontFamily:fontHead, fontSize:12 }}>🖨 Print</button>
+          <button onClick={handlePrint} style={{ background:'#eee', border:'1px solid #ccc', borderRadius:7, padding:'8px 16px', cursor:'pointer', fontFamily:fontHead, fontSize:12 }}>🖨 Print</button>
           <button
             onClick={handleSend}
             disabled={sending || hasPlaceholders}
@@ -287,13 +337,20 @@ export default function CollectionsPage() {
     setModal({ type, invoice, level, customer })
   }
 
-  const handleSendLetter = async (letterBody, deliveryMethod) => {
+  const handleSendLetter = async (letterHtml, deliveryMethod, opts = {}) => {
     // Sprint 13 #13A: actually send via Resend (and stub postal) when the
     // bookkeeper picks anything other than "manual". Manual still just records
     // the event for accounts where Sarah has already mailed via her own
     // channel. We POST to /api/collections-send BEFORE writing the
     // collections_events row — if the send fails (5xx, no key, etc.) the user
     // sees the error and we DO NOT record a "ghost sent" row.
+    //
+    // Sprint 18 #L1: the modal now passes the HTML letter as `letterHtml` for
+    // the audit trail / preview, plus the plain-text version as opts.letterText
+    // for the email body (the current API sends `text` to Resend; switching to
+    // multipart HTML email is a future API change and is intentionally out of
+    // scope for this commit per the constraints).
+    const letterText = opts.letterText || letterHtml
     if (deliveryMethod !== 'manual') {
       const recipientEmail = modal.invoice?.customer_email
         || modal.customer?.email
@@ -323,7 +380,7 @@ export default function CollectionsPage() {
             invoiceId: modal.invoice.id,
             level: modal.level,
             deliveryMethod,
-            letterText: letterBody,
+            letterText,
             to: { email: recipientEmail, name: recipientName },
             cc: [],
           }),
@@ -346,7 +403,10 @@ export default function CollectionsPage() {
       action_type: ACTION_LABELS[modal.level]?.type || 'notice',
       amount_at_action: parseFloat(modal.invoice.total||0),
       days_overdue_at_action: modal.invoice.daysOverdue,
-      letter_body: letterBody,
+      // Persist the HTML letter — that's the artefact a regulator/CFO would
+      // want to see in an audit. The plain-text rendering is regenerated on
+      // demand from the same template if needed.
+      letter_body: letterHtml,
       delivery_method: deliveryMethod,
       sent_at: new Date().toISOString(),
     })
