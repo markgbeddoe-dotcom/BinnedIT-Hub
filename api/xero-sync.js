@@ -207,7 +207,10 @@ async function deleteAndInsert(table, reportId, reportMonth, data, serviceKey, b
  *   delete-and-insert. Used by sync_all_bases so the second basis pass doesn't wipe the
  *   first basis's child rows (which have ON DELETE CASCADE on monthly_reports.id).
  */
-async function syncMonth(month, accessToken, tenantId, serviceKey, userId, basis = 'cash', reuseReport = false) {
+// Sprint 18 #X2 — also exported as a named binding so scripts/resync-xero.js
+// can invoke the same code path from a Node runtime, bypassing the HTTP+JWT
+// edge that's only suitable for browser-originated calls.
+export async function syncMonth(month, accessToken, tenantId, serviceKey, userId, basis = 'cash', reuseReport = false) {
   const [year, mon] = month.split('-').map(Number)
   const fromDate = `${month}-01`
   const lastDay  = new Date(year, mon, 0).getDate()
@@ -228,7 +231,14 @@ async function syncMonth(month, accessToken, tenantId, serviceKey, userId, basis
   }
 
   const plSections  = parsePLSections(plReport)
-  const financials  = mapPLToFinancials(plSections, month)
+  const financialsRaw = mapPLToFinancials(plSections, month)
+  // Sprint 18 #X3 — _diagnostic is an internal observability field returned by
+  // the mapper for caller logging. It must NOT be sent to Supabase (no such
+  // column). Strip before insert.
+  const { _diagnostic, ...financials } = financialsRaw
+  if (_diagnostic?.unclassified_trading_income?.length) {
+    console.log('XERO_PL_UNCLASSIFIED:', { month, basis, names: _diagnostic.unclassified_trading_income })
+  }
   const balanceSheet = parseBalanceSheet(bsReport)
   const arData      = arReport ? parseAgedReceivables(arReport) : null
   const reportMonth = `${month}-01`
@@ -488,6 +498,7 @@ export default async function handler(req) {
 }
 
 // ── Test exports ──────────────────────────────────────────────────────────────
-// Internal helpers exposed for Vitest. Not part of the runtime API surface.
+// Internal helpers exposed for Vitest + scripts/resync-xero.js. syncMonth is
+// inline-exported above (Sprint 18 #X2); the rest are re-exported here.
 // (Edge Function consumers only invoke `handler` via HTTP.)
-export { fetchProfitAndLoss, syncMonth, deleteAndInsert, monthRange }
+export { fetchProfitAndLoss, deleteAndInsert, monthRange }

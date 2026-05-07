@@ -169,6 +169,22 @@ export default async function handler(req) {
     })
   }
 
+  // Sprint 18 #X1 — read-only Xero policy (Mark, 2026-05-08).
+  // Writes to Xero are disabled until POC validation is complete.
+  // To re-enable, set XERO_WRITE_ENABLED='true' in the Vercel env (per scope).
+  // Searching for "xero writes" in the docs/audits directory will surface the
+  // policy + the test plan that gates re-enablement.
+  if (process.env.XERO_WRITE_ENABLED !== 'true') {
+    return new Response(JSON.stringify({
+      error: 'Xero writes are disabled in this environment.',
+      reason: 'Per Mark 2026-05-08 — invoice push to Xero is held until POC validated. Set XERO_WRITE_ENABLED=true in Vercel env to re-enable.',
+      kill_switch: 'XERO_WRITE_ENABLED',
+    }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
   let body
   try {
     body = await req.json()
