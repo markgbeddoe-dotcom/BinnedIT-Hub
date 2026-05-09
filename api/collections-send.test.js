@@ -229,6 +229,99 @@ describe('email method', () => {
   })
 })
 
+describe('letterHtml multipart (Sprint 18 #L4)', () => {
+  it('omits html from Resend payload when letterHtml is not provided', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+      if (url === RESEND_URL) return fetchOk({ id: 'r_no_html' }, 200)
+      return fetchOk({}, 201)
+    })
+
+    await handler(makeReq({
+      authHeader: VALID_BEARER,
+      body: {
+        invoiceId: 'inv-1',
+        level: 1,
+        deliveryMethod: 'email',
+        letterText: 'plain only',
+        to: { email: 'c@example.com' },
+      },
+    }))
+
+    const resendCall = fetchSpy.mock.calls.find(c => c[0] === RESEND_URL)
+    const payload = JSON.parse(resendCall[1].body)
+    expect(payload.html).toBeUndefined()
+    expect(payload.text).toMatch(/plain only/)
+  })
+
+  it('forwards letterHtml as `html` alongside `text` when provided', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+      if (url === RESEND_URL) return fetchOk({ id: 'r_with_html' }, 200)
+      return fetchOk({}, 201)
+    })
+
+    const fancyHtml = '<!doctype html><html><body><h1 class="ss-letter">Hello</h1></body></html>'
+
+    const res = await handler(makeReq({
+      authHeader: VALID_BEARER,
+      body: {
+        invoiceId: 'inv-1',
+        level: 3,
+        deliveryMethod: 'email',
+        letterText: 'plain fallback',
+        letterHtml: fancyHtml,
+        to: { email: 'c@example.com', name: 'Acme' },
+      },
+    }))
+
+    expect(res.status).toBe(200)
+    const resendCall = fetchSpy.mock.calls.find(c => c[0] === RESEND_URL)
+    const payload = JSON.parse(resendCall[1].body)
+    expect(payload.html).toBe(fancyHtml)
+    expect(payload.text).toMatch(/plain fallback/)
+  })
+
+  it('treats whitespace-only letterHtml as if not provided', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+      if (url === RESEND_URL) return fetchOk({ id: 'r_blank_html' }, 200)
+      return fetchOk({}, 201)
+    })
+
+    await handler(makeReq({
+      authHeader: VALID_BEARER,
+      body: {
+        invoiceId: 'inv-1',
+        level: 1,
+        deliveryMethod: 'email',
+        letterText: 'plain text',
+        letterHtml: '   \n\t  ',
+        to: { email: 'c@example.com' },
+      },
+    }))
+
+    const resendCall = fetchSpy.mock.calls.find(c => c[0] === RESEND_URL)
+    const payload = JSON.parse(resendCall[1].body)
+    expect(payload.html).toBeUndefined()
+  })
+
+  it('returns 400 when letterHtml is the wrong type', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => fetchOk({}))
+    const res = await handler(makeReq({
+      authHeader: VALID_BEARER,
+      body: {
+        invoiceId: 'inv-1',
+        level: 1,
+        deliveryMethod: 'email',
+        letterText: 'ok',
+        letterHtml: { not: 'a string' },
+        to: { email: 'c@example.com' },
+      },
+    }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/letterHtml/i)
+  })
+})
+
 describe('email_post method', () => {
   it('calls Resend AND returns postal_status: queued', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {

@@ -345,11 +345,10 @@ export default function CollectionsPage() {
     // collections_events row — if the send fails (5xx, no key, etc.) the user
     // sees the error and we DO NOT record a "ghost sent" row.
     //
-    // Sprint 18 #L1: the modal now passes the HTML letter as `letterHtml` for
-    // the audit trail / preview, plus the plain-text version as opts.letterText
-    // for the email body (the current API sends `text` to Resend; switching to
-    // multipart HTML email is a future API change and is intentionally out of
-    // scope for this commit per the constraints).
+    // Sprint 18 #L4: collections-send now accepts both letterHtml + letterText
+    // and forwards them as html+text to Resend (multipart MIME). Recipients
+    // with HTML-capable clients see the styled CFO-grade letter; plain-text
+    // clients still get the legible fallback.
     const letterText = opts.letterText || letterHtml
     if (deliveryMethod !== 'manual') {
       const recipientEmail = modal.invoice?.customer_email
@@ -381,6 +380,7 @@ export default function CollectionsPage() {
             level: modal.level,
             deliveryMethod,
             letterText,
+            letterHtml,
             to: { email: recipientEmail, name: recipientName },
             cc: [],
           }),

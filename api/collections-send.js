@@ -12,10 +12,16 @@
  *     "invoiceId":      "uuid",
  *     "level":          1 | 2 | 3 | 4,
  *     "deliveryMethod": "email" | "post" | "email_post" | "manual",
- *     "letterText":     "...",
+ *     "letterText":     "...",                  // required — plain-text fallback
+ *     "letterHtml":     "<!doctype html>..."    // optional — sent as multipart html alongside text
  *     "to":             { "email": "...", "name": "..." },
  *     "cc":             ["accounts@example.com"]
  *   }
+ *
+ * Sprint 18 #L4: when letterHtml is provided, Resend receives both `html` and
+ * `text` — recipients with HTML-capable clients get the styled CFO-grade
+ * letter (Montserrat headings, Calibri body, severity-aware framing, embedded
+ * logo); recipients on plain-text clients still get the legible fallback.
  *
  * Behaviour by deliveryMethod:
  *   - "email" / "email_post" → send via Resend from accounts@<RESEND_FROM>
@@ -70,13 +76,17 @@ function buildBody(letterText, level) {
   return `${letterText}\n\n---\nThis letter is also being recorded in our system as ${label}.`
 }
 
-async function sendViaResend(apiKey, { to, cc, subject, text }) {
+async function sendViaResend(apiKey, { to, cc, subject, text, html }) {
   const payload = {
     from: fromAddress(),
     to: [to],
     subject,
     text,
   }
+  // Resend accepts html + text together → multipart MIME, recipients get the
+  // best representation their client can render. We only include html when the
+  // caller passed a non-empty doc — never send an empty <html></html>.
+  if (typeof html === 'string' && html.trim().length) payload.html = html
   if (Array.isArray(cc) && cc.length) payload.cc = cc
 
   const res = await fetch(RESEND_API, {
@@ -154,13 +164,16 @@ export default async function handler(req) {
     return jsonResponse({ error: 'Invalid JSON body' }, 400)
   }
 
-  const { invoiceId, level, deliveryMethod, letterText, to, cc } = body || {}
+  const { invoiceId, level, deliveryMethod, letterText, letterHtml, to, cc } = body || {}
 
   if (!invoiceId || typeof invoiceId !== 'string') {
     return jsonResponse({ error: 'invoiceId is required' }, 400)
   }
   if (!letterText || typeof letterText !== 'string') {
     return jsonResponse({ error: 'letterText is required' }, 400)
+  }
+  if (letterHtml !== undefined && typeof letterHtml !== 'string') {
+    return jsonResponse({ error: 'letterHtml must be a string when provided' }, 400)
   }
   const lvl = parseInt(level, 10)
   if (!lvl || lvl < 1 || lvl > 4) {
@@ -206,6 +219,7 @@ export default async function handler(req) {
         cc: ccList,
         subject,
         text,
+        html: letterHtml,
       })
       await logSendAttempt(serviceKey, {
         recipient_email: to.email,
