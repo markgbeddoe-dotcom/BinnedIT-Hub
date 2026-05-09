@@ -7,6 +7,54 @@ This file is the single source of truth for what needs to happen next. Group by 
 
 ---
 
+## Sprint 18 — Xero read-only enforcement, migration tooling, formal collections letter — closed 2026-05-09
+
+Triggered by Mark's directive 2026-05-08: "the only thing that I dont want is to be writing anything to Xero at this time. We want read only activity in the application … Also we need a better formatted letter for the collection communications processes."
+
+| # | Item | Status |
+|---|---|---|
+| #X1 | Xero write kill-switch | ✅ DONE — `api/xero-invoice.js` short-circuits with HTTP 403 + `kill_switch: 'XERO_WRITE_ENABLED'` unless the env var is `'true'`. Read paths (P&L, BS, AR sync) untouched. To re-enable post-POC: set `XERO_WRITE_ENABLED=true` in Vercel production env. |
+| #X2 | `syncMonth` named export | ✅ DONE — was only re-exported at the bottom of `api/xero-sync.js`, causing duplicate-export SyntaxError on Node import. Now exported inline at definition. |
+| #X3 | Strip `_diagnostic` from sync output | ✅ DONE — internal observability field was tripping `PGRST204` because `financials_monthly` has no such column. Destructured out before INSERT, content logged via `console.log('XERO_PL_UNCLASSIFIED', …)` for tracing. |
+| #X4 | Migration runner (`apply-migration.js`) | ✅ DONE — Supabase Management API client with PAT auth (`SUPABASE_ACCESS_TOKEN`), tracks applied files in `public._skipsync_migrations` (sha256-keyed), refuses silent re-apply on hash mismatch, supports `--list`/`--dry-run`/`--force`/`--all-pending`, appends every apply to `docs/audits/migration-log.md`. |
+| #X5 | Service-role re-sync helper | ✅ DONE — `scripts/resync-xero.js` invokes the live `syncMonth` from Node over a month range × cash+accrual bases. No browser, no JWT — for operational re-syncs without UI clicks. |
+| #M4 | Live Xero ↔ Live DB drift-immune check | ✅ DONE — `scripts/meg-live-vs-db.js` queries Xero P&L right now and compares to current DB rows expecting tie-to-the-cent. **16 of 16 month-basis pairs clean** today (2026-05-09). Any future variance here is a real bug, not stale-export drift. |
+| #M5 | Apply pending migrations 017–021 | ✅ DONE — `017_canonical_bin_types`, `017_postal_letter_queue`, `018_per_bin_cost_detail`, `019_opex_wages_super_split`, `020_accounting_basis`, `021_company_assets_storage` all applied via the runner; live DB has cash + accrual rows for all 8 months. |
+| #L1 | CFO-grade HTML collections letter | ✅ DONE — `generateCollectionsLetterHTML` in `src/lib/legalTemplates.js`. Montserrat headings via Google Fonts, Calibri body stack, A4-width letter with letterhead/recipient block/RE: pill/justified body/numbered legal clauses/signature/footer. Severity-aware: L1 grey, L2 amber, L3 red + LEGAL DEMAND badge, L4 4px double border + s459E caption. Plain-text generator preserved for backward compat. |
+| #L2 | Logo upload in Settings | ✅ DONE — `CompanyIdentityEditor` in `SettingsPage.jsx` uploads to `company-assets/{user-id}/logo.{ext}`, 2MB / PNG-JPG-SVG validation, public-URL persisted to `platform_settings.company.logo_url`, bucket bootstrapped on the fly (owner-only) if missing. Migration `021_company_assets_storage.sql` ships the bucket + 3 RLS policies. Replace + Remove buttons. |
+| #L3 | LetterModal HTML preview + scoped print | ✅ DONE — `<iframe srcDoc>` for full style isolation, print routes through `iframe.contentWindow.print()` so only the letter prints (not modal chrome). Soft warning banner when no logo uploaded. Audit trail stores HTML on `collections_events.letter_body`. |
+| #L4 | Multipart HTML email to recipients | ✅ DONE — `api/collections-send.js` accepts optional `letterHtml`, forwards to Resend as `html`+`text` multipart. HTML clients render the styled letter; plain-text-only clients still get the legible fallback. Whitespace-only HTML treated as absent; wrong-type returns 400. CollectionsPage caller already had `letterHtml` rendered for the modal — now also passed in the API call. |
+
+**Verification:** Vitest **354 passing | 4 todo** (was 331 + 4; +23 new across `legalTemplates.test.js`, `collections-send.test.js`). `npm run build` 0 errors. Live Xero ↔ live DB recon 16/16 to the cent. Migration audit log shows all 6 applies clean.
+
+**Files created (8):** `scripts/apply-migration.js`, `scripts/resync-xero.js`, `scripts/meg-live-vs-db.js`, `supabase/migrations/021_company_assets_storage.sql`, `src/lib/legalTemplates.test.js`, `docs/audits/migration-log.md`, plus the regenerated working paper `docs/audits/2026-05-08-meg-end-to-end-reconciliation.md`.
+**Files modified:** `api/xero-invoice.js`, `api/xero-sync.js`, `api/collections-send.js`, `api/collections-send.test.js`, `src/lib/legalTemplates.js`, `src/components/CollectionsPage.jsx`, `src/components/SettingsPage.jsx`, `src/hooks/useCompanyConfig.js`.
+
+**Open follow-ups (not blocking):**
+- **Rotate Supabase PAT** — the value `sbp_b3d…` appeared in chat plaintext during the runner setup. Replace at supabase.com/dashboard/account/tokens, then `vercel env add SUPABASE_ACCESS_TOKEN production` and `vercel env pull .env.local`.
+- **Real postal integration** (PostGrid/Sendle) — `api/postal-send.js` still queues only. Mark deferred to Phase 3.
+- **Xero write POC** — re-enable `XERO_WRITE_ENABLED` in a separate Vercel preview env first; validate invoice round-trip end-to-end before flipping production.
+
+---
+
+## Sprint 17 — Cash/accrual basis support — closed 2026-05-08
+
+Triggered by Mark's directive 2026-05-07-PM: "we must always be using cash accounting not accrual for this system, however, a toggle would be ideal so you can switch between the two."
+
+| # | Item | Status |
+|---|---|---|
+| #17A | Audit: SkipSync was on the wrong basis | ✅ DONE — Meg's working paper `docs/audits/2026-05-07-cash-vs-accrual-reconciliation.md`. Headline: Feb-26 cash NP −$17,638.72 vs accrual NP +$30,511.71 (Δ $48,150). YTD overstatement on accrual: $34,397.82 (30.6%). |
+| #17B | Sync writer: dual-basis ingestion | ✅ DONE — `api/xero-sync.js` `fetchProfitAndLoss` accepts `paymentsOnly` (true=cash, false=accrual). New `sync_all_bases` HTTP action runs both passes per month. |
+| #17C | Schema: accounting_basis discriminator | ✅ DONE — migration `020_accounting_basis.sql` adds `accounting_basis text NOT NULL DEFAULT 'cash' CHECK (cash\|accrual)` to `financials_monthly`, `balance_sheet_monthly`, `debtors_monthly`. Backfills existing rows to 'accrual'. UNIQUE constraint widened to `(report_id, report_month, accounting_basis)`. DELETE+INSERT pattern scoped per basis. |
+| #17D | UI: basis toggle hook + state | ✅ DONE — `src/hooks/useAccountingBasis.js` reads localStorage `skipsync.accounting_basis`, defaults `'cash'`. Investor/viewer roles locked to cash. TanStack Query keys partitioned by `accounting_basis` so toggling triggers correct re-fetch. |
+| #17E | UAT: cash/accrual personas + Playwright | ✅ DONE — `docs/audits/2026-05-07-cash-accrual-uat.md`, Playwright specs cover desktop+mobile toggles, basis-pill display, role-locked viewer behaviour. |
+
+**Verification:** 331 Vitest + 4 todo passing. Two Playwright specs cover the toggle round-trip. Live DB now has cash + accrual rows for all 8 months (Jul-25 → Feb-26).
+
+**Process change (Meg, applied to §6.4 KPI integrity scoring):** A tab cannot be 🟢 Green if its underlying basis is not appropriate to the decision the tab drives. Loss-maker alerts must be on cash; investor reporting must be on accrual.
+
+---
+
 ## Sprints 12-16 — Full backlog completion — closed 2026-05-07
 
 Multi-agent execution: every remaining audit item from the original 38 was assigned to a parallel background agent (4 per sprint × 5 sprints = ~18 agents working in isolated git worktrees). Each agent owned a strict file boundary; integration cherry-picked branches into master sequentially.

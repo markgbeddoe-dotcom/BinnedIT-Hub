@@ -23,3 +23,7 @@ Sourced from the `_skipsync_migrations` audit table at apply time.
 - sha256: `eb185abf07b5b92c23facf050025cfc37d9af1af80e03db58d608b75d5f7f7dc`
 - duration: 964 ms
 
+## 2026-05-07T22:40:18.544Z — 021_company_assets_storage.sql
+- sha256: `cfcfdc35990ee297ed3cfd8a0319a2c499938b8f1ca23932251c568869be1be0`
+- duration: 1107 ms
+

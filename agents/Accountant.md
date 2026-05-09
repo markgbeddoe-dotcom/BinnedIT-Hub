@@ -463,6 +463,40 @@ Full reconciliation in `docs/audits/2026-05-07-cash-vs-accrual-reconciliation.md
 
 ---
 
+### 2026-05-09 — Post-Sprint-17 re-reconciliation + Sprint 18 close (Xero read-only, migration tooling, formal collections letter)
+
+The "next Meg engagement" promised at the end of the 2026-05-07-PM entry. Sprints 17B–E landed, migration 020 was applied via the new PAT-driven runner, and 16 month-basis pairs were re-synced. Meg re-ran the 5-way reconciliation framework and signed off the cash-basis ingestion.
+
+**Reconciliation result (the one a partner would ask for first):**
+- **Source-export (2026-05-06 static Xero CSVs) → mapper:** 0 variances across 16 month-basis pairs. The pure-mapping module (`api/lib/xero-mapper.js`) is correct against the export it was tied to. 99 Vitest assertions over real Binned-IT SKU naming patterns, all green.
+- **Live Xero → live SkipSync DB (drift-immune check, `scripts/meg-live-vs-db.js`):** **16 of 16 pairs tied to the cent today (2026-05-09).** The sync pipeline is provably correct as of right now. Any future variance here is a real bug, not stale-export drift.
+- **Static export → live DB (the one that initially looked alarming):** 16 'variances' that proved to be entirely Xero-side data evolution between the 2026-05-06 export and the 2026-05-08 re-sync (Mark + Sarah edited Xero in the intervening 2 days — e.g. Feb-26 cash NP moved from −$17,638.72 in the export to $36,265.10 live). Documented as data drift, not pipeline error.
+
+**Verdict:** 🟢 SIGN — cash/accrual basis discriminator works end-to-end. The §6.4 integrity score for tabs sourcing from `financials_monthly` returns to Green on cash basis (which is now the default and the one Mark drives day-to-day decisions on). Accrual remains available for the toggle and for AASB-compliant investor reporting.
+
+**Methodology lesson worth recording (for future engagements):**
+This engagement validated the **drift-immune verification pattern** as a permanent addition to the §5 reconciliation toolkit. When initial recon against a static export shows variances, the ambiguity ("is it a pipeline bug or did the upstream change?") is expensive — a partner can't sign off without resolving it. The cure is a check that fetches the live source and the live destination at the same moment and compares: any variance there is unambiguously a pipeline bug. Static-export checks remain valuable for *historical* reconciliation (the "what did Sarah see when she made that journal" question), but the live-vs-live check is what closes a sign-off.
+
+**Process additions to §5 (5-way reconciliation):**
+1. **Add a 6th tie:** Live Xero ↔ Live DB, run at sign-off time, expecting tied-to-the-cent. Any variance is a pipeline incident, not a timing difference. Captured in `scripts/meg-live-vs-db.js` for repeat use.
+2. **Two-tier variance triage:** when static-export recon shows variance, run the live-vs-live check before investigating the mapper. If live-vs-live is clean, the variance is upstream evolution and the static export is stale; document and move on. If live-vs-live is also dirty, *now* the mapper is suspect.
+3. **Migration audit table is now part of the working paper:** the schema state at sign-off time is no longer assumed — `public._skipsync_migrations` is queried as part of §8 first-action checklist step 1, with each applied filename + sha256 listed in the working paper appendix.
+
+**Sprint 18 ops findings (relevant to my future engagements):**
+- **Xero is now formally read-only in production** until POC validates writes. The `XERO_WRITE_ENABLED` kill-switch in `api/xero-invoice.js` returns HTTP 403 unless the env var is `'true'`. This eliminates a class of "Xero books got corrupted by SkipSync" incident that could have invalidated my reconciliations going forward. **For my purposes: every variance I find from now on is a SkipSync-side issue, not a SkipSync-corrupted-Xero issue.** That is a significantly cleaner mental model and a real audit-quality improvement.
+- **Migration tooling (`scripts/apply-migration.js`)** removes the operator-runbook dependency for schema changes. Previous engagements hit a "migration written but not applied" blocker (Sprint 17 cycle had migrations 017–020 written but not applied to the live DB until 2026-05-08). The runner closes that gap: `node scripts/apply-migration.js --list` is now my §8 step 1 default. If a migration is pending, I can apply it (or escalate to Mark) before signing off, instead of discovering at recon time that the schema doesn't match the code.
+- **Formal collections letter (Sprint 18 #L1–L4)** doesn't directly affect Meg's work but is relevant to the Collections-events audit trail. The HTML body is now stored on `collections_events.letter_body` for every send; the per-event row, severity level, and verbatim letter are all in one place — an unbroken chain for any future demand-letter dispute or ATO query about a written-off debt's collection efforts.
+
+**Open items that affect future Meg engagements:**
+- **Postal dispatch is still a stub** (`api/postal-send.js` queues only). When/if a customer disputes that a registered-post Letter of Demand was sent, the audit trail will only show "queued" for L3/L4 entries dated before the postal provider integration goes live. Note this in any working paper that touches `collections_events` between now and then.
+- **PAT rotation** — the Supabase Personal Access Token used by the migration runner appeared in chat plaintext during setup. Mark has been advised to rotate. Not strictly a financial-integrity issue, but PATs that can run arbitrary DDL are sensitive enough to flag in any infrastructure-controls assertion.
+
+**Recurrence risk for the Sprint 17 root cause (basis-blindness):** Now **Low**. The sync writer takes basis as a required parameter (no silent default to accrual), the schema enforces both bases as separate rows (no overwriting), the UI toggle is persisted per-user (no implicit basis assumed in screen reads), and the live-vs-live check covers both bases independently. The structural blind spot ("audited the data, didn't audit the choice of source") that produced the original incident is mitigated at four different layers.
+
+**Commit hashes (Sprint 18):** `b2d6a3d` (Xero kill-switch + migration tooling), `597dee8` (recon refresh), `36c570c` (Sally's CFO-grade letter + logo upload + migration 021), `f269bac` (multipart HTML email).
+
+---
+
 ## 11 — How to invoke
 
 In a new Claude Code session in this repo:
