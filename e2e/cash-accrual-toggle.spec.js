@@ -1,57 +1,54 @@
 import { test, expect } from '@playwright/test'
+import { hasAuthState } from './auth-helpers.js'
 
 /**
  * Cash vs Accrual basis toggle — Sprint 17 #17E persona-driven e2e specs.
+ * REPAIRED 2026-06-10 (GAP-072): the original file was written before siblings
+ * 17C/17D landed and 8/9 tests died at login. Changes:
  *
- * Companion plan: docs/audits/2026-05-07-cash-accrual-uat.md
+ *   1. AUTH — specs now run authenticated via the storageState fixture
+ *      (playwright.config.js `setup` project + e2e/auth.setup.js). If login
+ *      wasn't possible, hasAuthState() is false and every test here SKIPS
+ *      with a clear reason instead of timing out for 30s each.
+ *
+ *   2. SELECTORS — sibling 17D shipped a segmented control: the wrapper
+ *      carries data-testid="basis-toggle-desktop|mobile" plus data-basis and
+ *      data-basis-locked attributes; the two buttons inside carry
+ *      data-testid="basis-toggle-cash" / "basis-toggle-accrual" (App.jsx
+ *      ~L313-352). Clicking the WRAPPER (as the original spec did) hits an
+ *      arbitrary button — we now click the specific basis button and assert
+ *      state via the wrapper's data-basis attribute.
+ *
+ *   3. STORAGE KEY — the real key is 'skipsync.accounting_basis'
+ *      (src/hooks/useAccountingBasis.js L26), not 'skipsync.basis'.
+ *
+ *   4. LIVE-DATA ASSERTIONS — exact Feb-2026 dollar assertions (GAP-076:
+ *      brittle against re-sync) only run when E2E_LIVE_DATA=1. State/pill
+ *      assertions run everywhere.
+ *
+ *   5. INVESTOR TESTS — the promised `?role=` escape hatch was never built,
+ *      and main.jsx AuthGate hard-redirects viewer/investor off /dashboard/*
+ *      entirely, so the "investor sees a disabled toggle on Snapshot"
+ *      scenario cannot exist as written. Marked test.skip with a TODO.
  *
  * Source-of-truth dollar values (Feb 2026, closed month):
  *   - Cash net profit:    -$17,638.72
  *   - Accrual net profit:  $30,511.71
- *   - Δ (accrual - cash): +$48,150.43
- *
- * These match the assertions in the UAT plan §1 and the Vitest regression
- * case in api/lib/xero-mapper.test.js. If you change one of the three,
- * change all three.
- *
- * Selectors used by these tests (TODO for sibling agent 17D — please add
- * the data-testid attributes below to the components in question; the
- * test file documents the contract sibling 17C+17D need to honour):
- *
- *   data-testid="basis-toggle-desktop"   on the header chip (visible >= 768px)
- *   data-testid="basis-toggle-mobile"    on the mobile-drawer item (visible < 768px)
- *   data-testid="basis-toggle"           wrapper element common to both — the
- *                                         test asserts presence via the
- *                                         viewport-specific selector first,
- *                                         then falls back to the generic one.
- *   data-testid="kpi-net-profit"         the Snapshot Net Profit tile value
- *   data-testid="basis-pill-accrual"     the "(accrual basis)" badge that
- *                                         appears when accrual is active.
- *                                         MUST NOT be rendered when cash is
- *                                         active.
- *
- * Setup notes:
- *   - The login.spec.js precedent shows we test the unauthenticated boot path
- *     via baseURL '/'. For this feature we need to reach the Snapshot tab.
- *     Sibling 17D should expose a `?role=` query-param test escape hatch
- *     (or a fixture-injected test-only AuthContext provider) so we can mock
- *     the role without standing up a Supabase test user. See the Investor
- *     test below — that's the contract.
- *
- *   - All tests run at both desktop (1440x900) and mobile (390x844) per
- *     playwright.config.js project matrix. We branch selector choice off
- *     viewport.width.
- *
- *   - These tests will FAIL until 17C (mapper basis flag) and 17D (toggle
- *     UI + testids) cherry-pick into master. Do NOT run `npm run test:e2e`
- *     in this worktree — it's expected to fail. Verify by running it
- *     post-integration on master.
+ * These match api/lib/xero-mapper.test.js and the UAT plan §1 — change all
+ * three together.
  */
 
-// ── Constants pinned to the UAT plan §1 ──────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
 
+const BASIS_STORAGE_KEY = 'skipsync.accounting_basis' // useAccountingBasis.js L26
 const FEB_2026_CASH_NET_PROFIT_REGEX = /-?\$?\(?17[,.]638\.72\)?/
 const FEB_2026_ACCRUAL_NET_PROFIT_REGEX = /\$?30[,.]511\.71/
+
+// Exact dollar assertions require a live Supabase with Feb-2026 synced.
+const LIVE_DATA = process.env.E2E_LIVE_DATA === '1'
+
+// Every test in this file needs an authenticated session.
+test.skip(!hasAuthState(), 'No authenticated storage state — login failed in auth.setup.js (see its console warning). Authenticated basis-toggle specs need a reachable Supabase + valid TEST_USER_EMAIL/TEST_USER_PASSWORD.')
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -59,42 +56,44 @@ function isMobile(page) {
   return page.viewportSize().width < 768
 }
 
-/** Returns the toggle Locator appropriate for the current viewport. */
+/** The segmented-control WRAPPER for the current viewport (carries data-basis). */
 function basisToggle(page) {
   return isMobile(page)
     ? page.locator('[data-testid="basis-toggle-mobile"]')
     : page.locator('[data-testid="basis-toggle-desktop"]')
 }
 
-/** Returns the Net Profit KPI tile Locator. */
+/** The specific basis button inside the wrapper ('cash' | 'accrual'). */
+function basisButton(page, basis) {
+  return basisToggle(page).locator(`[data-testid="basis-toggle-${basis}"]`)
+}
+
+/** The Net Profit KPI tile Locator (SnapshotTab). */
 function netProfitTile(page) {
   return page.locator('[data-testid="kpi-net-profit"]')
 }
 
-/**
- * Navigate to the Snapshot dashboard for Feb 2026 with optional basis
- * pre-selected (URL param). Sibling 17D should ensure the Snapshot tab is
- * reachable at /dashboard/snapshot (existing route per PRD-v6 §6.2).
- */
-async function gotoSnapshotFeb2026(page, opts = {}) {
-  const params = new URLSearchParams()
-  params.set('month', '2026-02')
-  if (opts.basis) params.set('basis', opts.basis)
-  if (opts.role) params.set('role', opts.role) // test-only role escape hatch
-  await page.goto(`/dashboard/snapshot?${params.toString()}`)
+/** Navigate to the Snapshot dashboard for Feb 2026. */
+async function gotoSnapshotFeb2026(page) {
+  await page.goto('/dashboard/snapshot?month=2026-02')
 }
 
-/**
- * Clear localStorage AND any persisted basis state before the test runs.
- * The default-on-first-load assertion depends on this being clean.
- */
+/** Clear persisted basis state before page scripts run, so default-on-first-load
+ *  assertions start clean. NOTE: init scripts re-run on EVERY navigation, so we
+ *  guard with sessionStorage to only wipe on the first load — otherwise the
+ *  persistence-across-refresh test would wipe its own persisted choice. */
 async function clearBasisPersistence(page) {
-  await page.addInitScript(() => {
+  await page.addInitScript((key) => {
     try {
-      window.localStorage.removeItem('skipsync.basis')
-      window.localStorage.removeItem('basis')
-    } catch (_) { /* localStorage may not be available pre-navigation */ }
-  })
+      if (!window.sessionStorage.getItem('__e2e_basis_wiped')) {
+        window.localStorage.removeItem(key)
+        window.localStorage.removeItem('skipsync.basis') // legacy key from pre-17D spec
+        window.sessionStorage.setItem('__e2e_basis_wiped', '1')
+      }
+    } catch {
+      /* storage may not be available pre-navigation */
+    }
+  }, BASIS_STORAGE_KEY)
 }
 
 // ── 1. Toggle visibility (desktop + mobile selectors) ────────────────────────
@@ -103,18 +102,19 @@ test.describe('cash/accrual toggle — visibility at both viewports', () => {
   test('toggle is visible in the header for the current viewport', async ({ page }) => {
     await clearBasisPersistence(page)
     await gotoSnapshotFeb2026(page)
-    // Viewport-specific selector should be visible
-    await expect(basisToggle(page)).toBeVisible({ timeout: 10_000 })
+    await expect(basisToggle(page)).toBeVisible({ timeout: 15_000 })
+    // Segmented control exposes both basis buttons.
+    await expect(basisButton(page, 'cash')).toBeVisible()
+    await expect(basisButton(page, 'accrual')).toBeVisible()
   })
 
-  test('the OTHER viewport selector is hidden (desktop chip not on mobile, vice versa)', async ({ page }) => {
+  test('the OTHER viewport selector is not rendered (desktop chip not on mobile, vice versa)', async ({ page }) => {
     await clearBasisPersistence(page)
     await gotoSnapshotFeb2026(page)
+    await expect(basisToggle(page)).toBeVisible({ timeout: 15_000 })
     if (isMobile(page)) {
-      // On mobile, the desktop header chip should be display:none / not in tree.
       await expect(page.locator('[data-testid="basis-toggle-desktop"]')).toBeHidden()
     } else {
-      // On desktop, the mobile drawer item should be hidden.
       await expect(page.locator('[data-testid="basis-toggle-mobile"]')).toBeHidden()
     }
   })
@@ -123,37 +123,38 @@ test.describe('cash/accrual toggle — visibility at both viewports', () => {
 // ── 2. Default basis is cash on first load (Mark §2.1, Sarah §2.2, Jake §2.3) ─
 
 test.describe('cash/accrual toggle — first-load default', () => {
-  test('default basis is cash; Net Profit tile shows -$17,638.72 for Feb 2026', async ({ page }) => {
+  test('default basis is cash; accrual pill absent', async ({ page }) => {
     await clearBasisPersistence(page)
     await gotoSnapshotFeb2026(page)
-    await expect(netProfitTile(page)).toBeVisible({ timeout: 10_000 })
-    await expect(netProfitTile(page)).toHaveText(FEB_2026_CASH_NET_PROFIT_REGEX)
+    await expect(basisToggle(page)).toBeVisible({ timeout: 15_000 })
+    await expect(basisToggle(page)).toHaveAttribute('data-basis', 'cash')
     // The (accrual basis) pill MUST NOT be present when cash is active.
     await expect(page.locator('[data-testid="basis-pill-accrual"]')).toHaveCount(0)
+
+    if (LIVE_DATA) {
+      // GAP-076: exact Feb-2026 value — only meaningful against the live synced DB.
+      await expect(netProfitTile(page)).toHaveText(FEB_2026_CASH_NET_PROFIT_REGEX, { timeout: 15_000 })
+    }
   })
 })
 
 // ── 3. Clicking Accrual updates state + KPI tile ─────────────────────────────
 
 test.describe('cash/accrual toggle — clicking Accrual updates state and visible value', () => {
-  test('toggle to accrual changes Net Profit tile from cash to accrual value', async ({ page }) => {
+  test('toggle to accrual updates basis state and persists to localStorage', async ({ page }) => {
     await clearBasisPersistence(page)
     await gotoSnapshotFeb2026(page)
-    await expect(netProfitTile(page)).toHaveText(FEB_2026_CASH_NET_PROFIT_REGEX)
+    await expect(basisToggle(page)).toHaveAttribute('data-basis', 'cash', { timeout: 15_000 })
 
-    // Click the toggle. The exact interaction depends on how 17D implements it
-    // (button toggle, segmented control, switch). We use .click() on the
-    // viewport-specific testid wrapper — sibling 17D should ensure the click
-    // target propagates a single basis change regardless of element type.
-    await basisToggle(page).click()
+    await basisButton(page, 'accrual').click()
 
-    // KPI value should update without a full reload (within 500ms per §2.1 #3).
-    await expect(netProfitTile(page)).toHaveText(FEB_2026_ACCRUAL_NET_PROFIT_REGEX, { timeout: 1000 })
+    await expect(basisToggle(page)).toHaveAttribute('data-basis', 'accrual')
+    const persisted = await page.evaluate((key) => window.localStorage.getItem(key), BASIS_STORAGE_KEY)
+    expect(persisted).toBe('accrual')
 
-    // State should flow into URL OR localStorage (either is acceptable per §2.1 #4).
-    const url = new URL(page.url())
-    const localBasis = await page.evaluate(() => window.localStorage.getItem('skipsync.basis'))
-    expect(url.searchParams.get('basis') === 'accrual' || localBasis === 'accrual').toBe(true)
+    if (LIVE_DATA) {
+      await expect(netProfitTile(page)).toHaveText(FEB_2026_ACCRUAL_NET_PROFIT_REGEX, { timeout: 5_000 })
+    }
   })
 })
 
@@ -163,16 +164,22 @@ test.describe('cash/accrual toggle — persistence across refresh', () => {
   test('selecting accrual then refreshing keeps the page on accrual', async ({ page }) => {
     await clearBasisPersistence(page)
     await gotoSnapshotFeb2026(page)
-    await basisToggle(page).click()
-    await expect(netProfitTile(page)).toHaveText(FEB_2026_ACCRUAL_NET_PROFIT_REGEX, { timeout: 1000 })
+    await expect(basisToggle(page)).toBeVisible({ timeout: 15_000 })
+    await basisButton(page, 'accrual').click()
+    await expect(basisToggle(page)).toHaveAttribute('data-basis', 'accrual')
 
-    // Hard reload — same URL, no query-param shortcut.
+    // Hard reload — same URL, no query-param shortcut. The init script from
+    // clearBasisPersistence re-runs here but is sessionStorage-guarded, so the
+    // persisted accrual choice survives.
     await page.reload()
 
-    await expect(netProfitTile(page)).toBeVisible({ timeout: 10_000 })
-    await expect(netProfitTile(page)).toHaveText(FEB_2026_ACCRUAL_NET_PROFIT_REGEX)
-    // Pill should also be back.
-    await expect(page.locator('[data-testid="basis-pill-accrual"]')).toBeVisible()
+    await expect(basisToggle(page)).toBeVisible({ timeout: 15_000 })
+    await expect(basisToggle(page)).toHaveAttribute('data-basis', 'accrual')
+    await expect(page.locator('[data-testid="basis-pill-accrual"]').first()).toBeVisible()
+
+    if (LIVE_DATA) {
+      await expect(netProfitTile(page)).toHaveText(FEB_2026_ACCRUAL_NET_PROFIT_REGEX, { timeout: 15_000 })
+    }
   })
 })
 
@@ -182,85 +189,55 @@ test.describe('cash/accrual toggle — accrual basis pill visibility', () => {
   test('pill appears when accrual is active and disappears when toggled back', async ({ page }) => {
     await clearBasisPersistence(page)
     await gotoSnapshotFeb2026(page)
+    await expect(basisToggle(page)).toBeVisible({ timeout: 15_000 })
     // Initially cash — pill absent.
     await expect(page.locator('[data-testid="basis-pill-accrual"]')).toHaveCount(0)
 
-    // Toggle to accrual — pill appears.
-    await basisToggle(page).click()
-    const pill = page.locator('[data-testid="basis-pill-accrual"]')
-    await expect(pill).toBeVisible({ timeout: 1000 })
+    // Toggle to accrual — pill appears (desktop renders it on the active tab,
+    // mobile renders a standalone pill; both carry the same testid).
+    await basisButton(page, 'accrual').click()
+    const pill = page.locator('[data-testid="basis-pill-accrual"]').first()
+    await expect(pill).toBeVisible({ timeout: 2_000 })
     await expect(pill).toHaveText(/accrual basis/i)
 
     // Toggle back to cash — pill disappears.
-    await basisToggle(page).click()
+    await basisButton(page, 'cash').click()
     await expect(page.locator('[data-testid="basis-pill-accrual"]')).toHaveCount(0)
   })
 })
 
 // ── 6. Investor role: toggle disabled, basis stays cash (UAT §2.4) ───────────
 //
-// Mocking the role:
-//   - Preferred mechanism (sibling 17D should add): a `?role=investor`
-//     query-param escape hatch that the AuthContext honours when running
-//     under Playwright (gate via NODE_ENV !== 'production' or a Vite env
-//     flag like VITE_ALLOW_TEST_ROLE).
-//   - Fallback mechanism (also acceptable): Playwright fixture that sets
-//     a cookie or localStorage entry like `skipsync.test.role=investor`
-//     before navigation. This file uses the query-param approach — if 17D
-//     chooses the localStorage approach, swap the addInitScript below.
-//
-// TODO 17D — without the escape hatch the test cannot run; document above
-// covers the two acceptable shapes.
+// TODO (GAP-072 follow-up — needs a product decision, not just test code):
+// these two specs are UNRUNNABLE against the current app:
+//   - The promised `?role=investor` test escape hatch was never built
+//     (no role/basis query-param handling exists in App.jsx or AuthContext).
+//   - main.jsx AuthGate redirects viewer/investor roles to /investor for ANY
+//     other path, so an investor can never reach /dashboard/snapshot to see
+//     a "disabled" toggle there. The basis lock itself lives in
+//     useAccountingBasis (locked => forced 'cash') and is best covered by a
+//     vitest hook test plus an e2e against a real investor storageState
+//     fixture (second setup project with TEST_INVESTOR_EMAIL/PASSWORD).
+// Re-enable once either (a) an investor test account + second storageState
+// fixture exists, or (b) the escape hatch ships behind VITE_ALLOW_TEST_ROLE.
 
 test.describe('cash/accrual toggle — investor role lock (UAT §2.4)', () => {
-  test('investor sees the toggle but cannot interact; basis stays cash', async ({ page }) => {
-    await clearBasisPersistence(page)
-    // Use the query-param escape hatch. Sibling 17D may instead rely on
-    // a localStorage-based test fixture — see comment block above.
-    await gotoSnapshotFeb2026(page, { role: 'investor' })
+  test.skip(true, 'Needs an investor auth fixture: ?role= escape hatch was never built and AuthGate redirects investors off /dashboard/* — see TODO above.')
 
+  test('investor sees the toggle but cannot interact; basis stays cash', async ({ page }) => {
+    await gotoSnapshotFeb2026(page)
     const toggle = basisToggle(page)
     await expect(toggle).toBeVisible({ timeout: 10_000 })
-
-    // Disabled state — accept either `disabled` attribute or `aria-disabled="true"`.
-    const isDisabled = await toggle.evaluate((el) => {
-      return el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true'
-    })
-    expect(isDisabled).toBe(true)
-
-    // Tooltip / title / aria-describedby explains why.
-    const explainer = await toggle.evaluate((el) => {
-      const title = el.getAttribute('title') || ''
-      const describedById = el.getAttribute('aria-describedby')
-      let described = ''
-      if (describedById) {
-        const node = document.getElementById(describedById)
-        if (node) described = node.textContent || ''
-      }
-      // Also check for a child .tooltip element if the implementation uses one.
-      const tooltipChild = el.querySelector('[role="tooltip"]')?.textContent || ''
-      return `${title} ${described} ${tooltipChild}`.trim()
-    })
-    expect(explainer).toMatch(/investor|reporting consistency|contact the owner/i)
-
-    // KPI tile must read the cash value before AND after a force-click.
-    await expect(netProfitTile(page)).toHaveText(FEB_2026_CASH_NET_PROFIT_REGEX)
-
-    // Force-click the disabled control. The basis must NOT change.
-    await toggle.click({ force: true }).catch(() => { /* disabled elements may throw */ })
-    await expect(netProfitTile(page)).toHaveText(FEB_2026_CASH_NET_PROFIT_REGEX)
-
-    // Pill must NEVER render on the investor route.
+    await expect(toggle).toHaveAttribute('data-basis-locked', 'true')
+    await expect(basisButton(page, 'accrual')).toBeDisabled()
+    await basisButton(page, 'accrual').click({ force: true }).catch(() => {})
+    await expect(toggle).toHaveAttribute('data-basis', 'cash')
     await expect(page.locator('[data-testid="basis-pill-accrual"]')).toHaveCount(0)
   })
 
   test('investor: ?basis=accrual deep-link is silently overridden to cash', async ({ page }) => {
-    await clearBasisPersistence(page)
-    await gotoSnapshotFeb2026(page, { role: 'investor', basis: 'accrual' })
-    await expect(netProfitTile(page)).toBeVisible({ timeout: 10_000 })
-    // Even with ?basis=accrual in the URL, investor sees cash. Per UAT §3.2
-    // follow-up: "even with ?basis=accrual in the URL, the page renders cash".
-    await expect(netProfitTile(page)).toHaveText(FEB_2026_CASH_NET_PROFIT_REGEX)
+    await page.goto('/dashboard/snapshot?month=2026-02&basis=accrual')
+    await expect(basisToggle(page)).toHaveAttribute('data-basis', 'cash', { timeout: 10_000 })
     await expect(page.locator('[data-testid="basis-pill-accrual"]')).toHaveCount(0)
   })
 })

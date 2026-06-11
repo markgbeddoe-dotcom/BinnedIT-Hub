@@ -2,13 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, main, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [master, main, develop]
 
 jobs:
   build:
-    name: Build & Lint
+    name: Lint, Test & Build
     runs-on: ubuntu-latest
 
     steps:
@@ -24,9 +24,58 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # GAP-073 — static safety on a plain-JS codebase.
+      # Errors fail the build; warnings are reported but non-blocking.
+      - name: Lint (eslint flat config)
+        run: npx eslint src api
+
+      # GAP-071 — the vitest suite (~350 tests, <10s) must gate every push/PR.
+      - name: Unit tests (vitest)
+        run: npx vitest run
+
       - name: Build (validates no compile errors)
         run: npm run build
         env:
           VITE_SUPABASE_URL: https://placeholder.supabase.co
           VITE_SUPABASE_ANON_KEY: placeholder_anon_key
           VITE_APP_ENV: ci
+
+  # GAP-072 — Playwright e2e. Opt-in: runs only when the repo has the
+  # TEST_USER_EMAIL / TEST_USER_PASSWORD secrets configured (needs a live
+  # Supabase project to log in against). See e2e/README.md.
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    if: ${{ vars.RUN_E2E == 'true' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e suite
+        run: npx playwright test
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: test-results/
+          retention-days: 7

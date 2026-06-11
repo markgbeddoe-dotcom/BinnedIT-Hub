@@ -1,0 +1,4 @@
+# Saved login storage states (Supabase session tokens) — never commit.
+# (Local .gitignore because the repo-root .gitignore is owned by another agent.)
+*
+!.gitignore
