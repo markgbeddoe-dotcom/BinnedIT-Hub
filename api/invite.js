@@ -17,7 +17,7 @@
  * - SUPABASE_SERVICE_ROLE_KEY is used server-side only
  * - Invites restricted to @binnedit.com.au domain only
  *
- * Request body: { email: string, role: 'owner'|'manager'|'bookkeeper'|'viewer' }
+ * Request body: { email: string, role: 'owner'|'manager'|'bookkeeper'|'viewer'|'investor'|'driver'|'fleet_manager' }
  * Response: { success: true, userId: string } or { error: string }
  *
  * @param {Request} req - Edge runtime Request object
@@ -51,7 +51,8 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Invalid request body' }), { status: 400 });
   }
 
-  const VALID_ROLES = ['owner', 'manager', 'bookkeeper', 'viewer'];
+  // Must match the profiles.role CHECK constraint (supabase/migrations/022_roles_expansion.sql)
+  const VALID_ROLES = ['owner', 'manager', 'bookkeeper', 'viewer', 'investor', 'driver', 'fleet_manager'];
   if (!email || !role || !VALID_ROLES.includes(role)) {
     return new Response(JSON.stringify({ error: 'email and a valid role are required' }), { status: 400 });
   }

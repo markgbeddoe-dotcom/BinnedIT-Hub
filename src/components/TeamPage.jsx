@@ -14,7 +14,7 @@ import { useBreakpoint } from '../hooks/useBreakpoint'
 // previously had no UI).
 import CompliancePanel from './CompliancePanel'
 
-const ROLES = ['owner', 'manager', 'bookkeeper', 'driver', 'fleet_manager', 'viewer']
+const ROLES = ['owner', 'manager', 'bookkeeper', 'driver', 'fleet_manager', 'viewer', 'investor']
 
 const ROLE_COLORS = {
   owner:        B.yellow,
@@ -23,6 +23,7 @@ const ROLE_COLORS = {
   driver:       B.orange,
   fleet_manager:B.cyan,
   viewer:       B.textMuted,
+  investor:     B.purple,
 }
 
 export default function TeamPage() {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { B, fontHead, fontBody } from '../theme';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import { SectionHeader } from './UIComponents';
@@ -473,6 +473,49 @@ function WhiteLabelWidget() {
   );
 }
 
+// ─── Settings tab navigation ────────────────────────────────────────────────
+// Sections are grouped by activity. Deep-linkable via ?tab=<id> so other pages
+// can link straight to a tab (e.g. /settings?tab=users).
+const SETTINGS_TABS = [
+  { id: 'alerts',       label: 'Alerts' },
+  { id: 'users',        label: 'Users & Roles' },
+  { id: 'bins',         label: 'Pricing & Bins' },
+  { id: 'branding',     label: 'Bookings & Branding' },
+  { id: 'integrations', label: 'Integrations' },
+];
+
+// All seven roles permitted by the profiles.role CHECK constraint
+// (supabase/migrations/022_roles_expansion.sql). Must stay in sync with
+// VALID_ROLES in api/invite.js.
+const ALL_ROLES = ['owner', 'manager', 'fleet_manager', 'bookkeeper', 'driver', 'viewer', 'investor'];
+
+const ROLE_OPTIONS = [
+  { value: 'owner',         label: 'Owner' },
+  { value: 'manager',       label: 'Manager' },
+  { value: 'fleet_manager', label: 'Fleet Manager' },
+  { value: 'bookkeeper',    label: 'Bookkeeper' },
+  { value: 'driver',        label: 'Driver' },
+  { value: 'viewer',        label: 'Viewer' },
+  { value: 'investor',      label: 'Investor' },
+];
+
+// Read-only summary of what each role can do. Derived from the role booleans
+// in src/context/AuthContext.jsx and the route gates in src/App.jsx.
+const ROLE_MATRIX = [
+  { role: 'owner',         access: 'Everything — all pages, settings, user invites, audit log, Xero & AI configuration.' },
+  { role: 'manager',       access: 'Manager-level: operations, dispatch, Rules Engine, waste-audit approvals, fleet & team edits.' },
+  { role: 'fleet_manager', access: 'Same manager-level access: operations, dispatch, rules, waste audits, fleet.' },
+  { role: 'bookkeeper',    access: 'Financials: invoices, collections, Xero sync; waste audits read-only.' },
+  { role: 'driver',        access: 'Driver app (/driver) only — pre-start checklist, job queue, photos, hazard reports.' },
+  { role: 'viewer',        access: 'Read-only — redirected to the investor dashboard, locked to cash accounting basis.' },
+  { role: 'investor',      access: 'Same as viewer — locked to the read-only /investor view on the cash basis.' },
+];
+
+const NAV_CARDS = {
+  team:  { id: 'team',  icon: '👥', title: 'Team & Staff', desc: 'Manage roles, profiles, and staff certifications', path: '/settings/team', color: B.blue },
+  audit: { id: 'audit', icon: '📋', title: 'Audit Log', desc: 'Immutable record of all system changes', path: '/settings/audit', color: B.purple },
+};
+
 export default function SettingsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -651,6 +694,31 @@ export default function SettingsPage() {
 
   const { isMobile } = useBreakpoint();
 
+  // ── Tab state — driven by the URL so tabs are deep-linkable (?tab=users).
+  // Changing tab replaces (not pushes) the history entry.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const activeTab = SETTINGS_TABS.some(t => t.id === tabParam) ? tabParam : 'alerts';
+  const setActiveTab = (id) => setSearchParams({ tab: id }, { replace: true });
+
+  const renderNavCard = (card) => (
+    <button
+      key={card.id}
+      onClick={() => navigate(card.path)}
+      style={{
+        background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 10,
+        padding: '18px 20px', cursor: 'pointer', textAlign: 'left',
+        borderLeft: `4px solid ${card.color}`, display: 'flex', flexDirection: 'column', gap: 4,
+      }}
+      onMouseOver={e => { e.currentTarget.style.background = B.cardBgHover }}
+      onMouseOut={e => { e.currentTarget.style.background = B.cardBg }}
+    >
+      <div style={{ fontSize: 22 }}>{card.icon}</div>
+      <div style={{ fontFamily: fontHead, fontSize: 13, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase' }}>{card.title}</div>
+      <div style={{ fontSize: 11, color: B.textMuted }}>{card.desc}</div>
+    </button>
+  );
+
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: isMobile ? '20px 12px' : '40px 24px' }}>
       <SectionHeader title="Settings" subtitle="Alert thresholds, users, bin types, and company info" />
@@ -669,31 +737,27 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* ── Sub-page navigation ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 12, marginBottom: 24 }}>
-        {[
-          { id: 'team', icon: '👥', title: 'Team & Staff', desc: 'Manage roles, profiles, and staff certifications', path: '/settings/team', color: B.blue },
-          { id: 'audit', icon: '📋', title: 'Audit Log', desc: 'Immutable record of all system changes', path: '/settings/audit', color: B.purple },
-        ].map(card => (
-          <button
-            key={card.id}
-            onClick={() => navigate(card.path)}
-            style={{
-              background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 10,
-              padding: '18px 20px', cursor: 'pointer', textAlign: 'left',
-              borderLeft: `4px solid ${card.color}`, display: 'flex', flexDirection: 'column', gap: 4,
-            }}
-            onMouseOver={e => { e.currentTarget.style.background = B.cardBgHover }}
-            onMouseOut={e => { e.currentTarget.style.background = B.cardBg }}
-          >
-            <div style={{ fontSize: 22 }}>{card.icon}</div>
-            <div style={{ fontFamily: fontHead, fontSize: 13, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase' }}>{card.title}</div>
-            <div style={{ fontSize: 11, color: B.textMuted }}>{card.desc}</div>
-          </button>
+      {/* ── Sub-page navigation (cross-cutting — lives above the tab bar) ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2,1fr)', gap: 12, marginBottom: 24 }}>
+        {renderNavCard(NAV_CARDS.audit)}
+      </div>
+
+      {/* ── Tab bar (same visual pattern as FleetManagementPage) ── */}
+      <div style={{ display: 'flex', gap: 2, marginBottom: 20, borderBottom: `2px solid ${B.cardBorder}`, overflowX: 'auto' }}>
+        {SETTINGS_TABS.map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+            background: 'transparent', border: 'none', padding: '8px 18px', cursor: 'pointer',
+            fontFamily: fontHead, fontSize: 12, fontWeight: 700, letterSpacing: '0.06em',
+            color: activeTab === t.id ? B.textPrimary : B.textMuted,
+            borderBottom: activeTab === t.id ? `3px solid ${B.yellow}` : '3px solid transparent',
+            marginBottom: -2, transition: 'all 0.15s', textTransform: 'uppercase',
+            whiteSpace: 'nowrap', flexShrink: 0,
+          }}>{t.label}</button>
         ))}
       </div>
 
-      {/* Alert Thresholds */}
+      {/* Alert Thresholds (Alerts tab) */}
+      {activeTab === 'alerts' && (
       <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
         <div style={{ fontFamily: fontHead, fontSize: 14, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 16 }}>Alert Thresholds</div>
         {thresholdsLoading ? (
@@ -755,9 +819,10 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+      )}
 
-      {/* User Management */}
-      {isOwner && (
+      {/* User Management (Users & Roles tab) */}
+      {activeTab === 'users' && isOwner && (
         <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
           <div style={{ fontFamily: fontHead, fontSize: 14, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 16 }}>User Management</div>
           {profilesLoading ? (
@@ -772,7 +837,7 @@ export default function SettingsPage() {
                     <div style={{ fontSize: 13, fontWeight: 600, color: B.textPrimary }}>{p.full_name || p.id.slice(0, 8) + '...'}</div>
                   </div>
                   <select value={p.role} onChange={e => updateRoleMut.mutate({ userId: p.id, role: e.target.value })} style={{ ...iStyle, padding: '4px 8px' }}>
-                    {['owner', 'manager', 'bookkeeper', 'viewer'].map(r => <option key={r} value={r}>{r}</option>)}
+                    {ALL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
               ))}
@@ -800,10 +865,7 @@ export default function SettingsPage() {
                   onChange={e => setInviteRole(e.target.value)}
                   style={{ ...iStyle, width: '100%' }}
                 >
-                  <option value="bookkeeper">Bookkeeper</option>
-                  <option value="manager">Fleet Manager</option>
-                  <option value="viewer">Investor / Viewer</option>
-                  <option value="owner">Owner</option>
+                  {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
               </div>
               <button
@@ -837,8 +899,43 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Bin Types */}
-      {(isOwner || isManager) && (
+      {/* Role permissions matrix + Team quick-link (Users & Roles tab) */}
+      {activeTab === 'users' && (
+        <>
+          <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
+            <div style={{ fontFamily: fontHead, fontSize: 14, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 4 }}>What Each Role Can Do</div>
+            <p style={{ fontSize: 12, color: B.textMuted, marginBottom: 12, lineHeight: 1.5 }}>
+              Read-only reference. Assign roles with the dropdowns above, or manage profiles on the Team page.
+            </p>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 440 }}>
+                <thead>
+                  <tr style={{ borderBottom: `2px solid ${B.cardBorder}` }}>
+                    {['Role', 'Access'].map(h => (
+                      <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontFamily: fontHead, fontSize: 10, color: B.textMuted, textTransform: 'uppercase' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ROLE_MATRIX.map(r => (
+                    <tr key={r.role} style={{ borderBottom: `1px solid ${B.cardBorder}` }}>
+                      <td style={{ padding: '8px 10px', fontFamily: fontHead, fontSize: 11, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{r.role}</td>
+                      <td style={{ padding: '8px 10px', color: B.textSecondary, lineHeight: 1.5 }}>{r.access}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2,1fr)', gap: 12, marginBottom: 20 }}>
+            {renderNavCard(NAV_CARDS.team)}
+          </div>
+        </>
+      )}
+
+      {/* Bin Types (Pricing & Bins tab) */}
+      {activeTab === 'bins' && (isOwner || isManager) && (
         <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
           <div style={{ fontFamily: fontHead, fontSize: 14, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 16 }}>Bin Types</div>
           {binTypesLoading ? (
@@ -868,7 +965,8 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Push Notifications */}
+      {/* Push Notifications (Alerts tab) */}
+      {activeTab === 'alerts' && (
       <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
         <div style={{ fontFamily: fontHead, fontSize: 14, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 12 }}>Push Notifications</div>
         {pushStatus === 'unsupported' && (
@@ -902,9 +1000,10 @@ export default function SettingsPage() {
           <div style={{ marginTop: 10, fontSize: 12, color: pushStatus === 'subscribed' ? B.green : B.textMuted }}>{pushMsg}</div>
         )}
       </div>
+      )}
 
-      {/* ── Xero Integration ── */}
-      {isOwner && (
+      {/* ── Xero Integration (Integrations tab) ── */}
+      {activeTab === 'integrations' && isOwner && (
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontFamily: fontHead, fontSize: 16, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 4 }}>Xero Integration</div>
           <div style={{ fontSize: 13, color: B.textSecondary, marginBottom: 16 }}>Connect Xero to automatically sync your P&L, Balance Sheet, and AR data each month.</div>
@@ -1039,14 +1138,14 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Company Identity (legal-letter ABN/BSB/etc — Sprint 11 #11 follow-up) */}
-      {isOwner && <CompanyIdentityEditor />}
+      {/* Company Identity (Bookings & Branding tab — legal-letter ABN/BSB/etc — Sprint 11 #11 follow-up) */}
+      {activeTab === 'branding' && isOwner && <CompanyIdentityEditor />}
 
-      {/* White-Label Booking Widget */}
-      {isOwner && <WhiteLabelWidget />}
+      {/* White-Label Booking Widget (Bookings & Branding tab) */}
+      {activeTab === 'branding' && isOwner && <div style={{ marginBottom: 20 }}><WhiteLabelWidget /></div>}
 
-      {/* Claude AI Configuration */}
-      {isOwner && (
+      {/* Claude AI Configuration (Integrations tab) */}
+      {activeTab === 'integrations' && isOwner && (
         <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
             <span style={{ fontSize: 20 }}>🤖</span>
@@ -1164,7 +1263,8 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Company Info */}
+      {/* Company Info (Bookings & Branding tab) */}
+      {activeTab === 'branding' && (
       <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24 }}>
         <div style={{ fontFamily: fontHead, fontSize: 14, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 16 }}>Company Info</div>
         {[
@@ -1180,6 +1280,7 @@ export default function SettingsPage() {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }

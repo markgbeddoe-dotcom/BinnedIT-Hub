@@ -109,7 +109,7 @@ On success the customer sees "Booking Confirmed!" with a booking reference (the 
 
 ### 2. White-label widget (`/embed/<slug>`)
 
-The exact same four-step form, themed with a partner tenant's logo, colours, phone and bin prices (from the `tenants` and `tenant_bin_sizes` tables). It is designed to be embedded in an iframe on a third party's website — Settings → White-Label Widget shows the copy-paste iframe snippet. Bookings created through it carry the tenant's `tenant_id`. To add a new tenant, insert rows into `tenants` and `tenant_bin_sizes`.
+The exact same four-step form, themed with a partner tenant's logo, colours, phone and bin prices (from the `tenants` and `tenant_bin_sizes` tables). It is designed to be embedded in an iframe on a third party's website — Settings → Bookings & Branding tab → White-Label Widget shows the copy-paste iframe snippet. Bookings created through it carry the tenant's `tenant_id`. To add a new tenant, insert rows into `tenants` and `tenant_bin_sizes`.
 
 ### 3. Office-side CRM booking (Bookings page)
 
@@ -151,7 +151,7 @@ Route `/dispatch`. A dark-themed kanban board headed "Dispatch Board" with today
 ### Assigning a driver, truck and date
 
 1. Click a job card to expand it (cards show customer, status badge, bin size, waste type, suburb, cost and margin; expanded view adds full address, date and notes).
-2. In the expanded card's **Assignment** panel, choose a **Driver** from the dropdown (drivers are profiles with the `driver` role — if the list says "No drivers yet — add in Team page", create driver accounts on the Team page first), a **Truck** (active trucks from the fleet roster, e.g. "TRK-01 — Mack Hook Lift"; "— None —" allowed), and a **Date**.
+2. In the expanded card's **Assignment** panel, choose a **Driver** from the dropdown (drivers are profiles with the `driver` role — if the list says "No drivers yet — add in Team page", create driver accounts first: invite them with the **driver** role from Settings → Users & Roles, or invite with any role and change it to driver on the Team page), a **Truck** (active trucks from the fleet roster, e.g. "TRK-01 — Mack Hook Lift"; "— None —" allowed), and a **Date**.
 3. Click **Assign** (the button is disabled until a driver is selected). The job saves driver, truck and date in one update. If the job was Pending and now has both a driver and a date, it automatically moves to **Scheduled**.
 4. To reassign, expand the card again, pick a different driver/truck/date and press Assign — assignment is editable up until the job is completed. The reassigned job appears in the new driver's phone queue on its next refresh.
 5. To unassign, click **Clear** — driver fields are wiped (truck/date as currently shown are kept) and the ⚠ chip returns.
@@ -285,7 +285,7 @@ Sending a letter:
 3. Pick the delivery method — **email**, post, or manual — and press Send. Email goes out via the accounts address; "post" currently only queues the letter (postal dispatch is a stub awaiting a provider integration); "manual" records the event without sending.
 4. Every dispatch is recorded as a collections event with a verbatim copy of the letter, so the audit trail survives a dispute.
 
-Guard rail: if the company identity (ABN/ACN/BSB etc.) hasn't been configured in Settings, the modal shows "⚠ Company config not set… this letter would be legally defective if sent" — configure Settings → Company Identity first. Director-guarantee and security-over-assets letter templates also exist for account customers (generated from the Customers page workflows).
+Guard rail: if the company identity (ABN/ACN/BSB etc.) hasn't been configured in Settings, the modal shows "⚠ Company config not set… this letter would be legally defective if sent" — configure Settings → Bookings & Branding tab → Company Identity first. Director-guarantee and security-over-assets letter templates also exist for account customers (generated from the Customers page workflows).
 
 ---
 
@@ -388,21 +388,30 @@ The separate `/reports` screen (Monthly Management Report, Profitability by Bin 
 
 ### Settings (`/settings`)
 
-Two navigation cards at the top — **Team & Staff** and **Audit Log** — then the sections:
+An **Audit Log** navigation card sits at the top, then the page is organised into **five tabs**: **Alerts**, **Users & Roles**, **Pricing & Bins**, **Bookings & Branding** and **Integrations**. Tabs are deep-linkable via the `?tab=` query parameter (`alerts`, `users`, `bins`, `branding`, `integrations`) — e.g. `/settings?tab=users` opens Users & Roles directly. The default tab is Alerts.
 
-- **Alert Thresholds** — the table of warning/critical values behind dashboard alerts; the owner can edit each row.
-- **User Management** (owner) — invite users by email and set roles.
-- **Bin Types** — bin type/pricing reference data.
-- **Company Identity** — company name, ABN, ACN, registered address, accounts phone/email, BSB, bank account, penalty interest rate, plus a letterhead logo upload (PNG/JPG/SVG, max 2 MB). These values feed the collections letters — until they're filled in, letter sending is flagged as legally defective.
-- **White-Label Widget** — the iframe embed snippet for `/embed/<slug>` partners.
-- **Xero** — connection status, connect button and sync controls (read-only sync of financials; a green "Xero Connected Successfully" toast confirms linking).
-- **Push notifications** — enable/disable browser push.
+- **Alerts** tab:
+  - **Alert Thresholds** — the table of warning/critical values behind dashboard alerts; the owner can edit each row.
+  - **Push Notifications** — enable/disable browser push.
+- **Users & Roles** tab:
+  - **User Management** (owner) — the user list with a role dropdown per user, and the **Invite New User** form. Both offer **all seven roles**: owner, manager, fleet_manager, bookkeeper, **driver**, viewer and investor (the invite form defaults to bookkeeper). To add a driver, invite them with the **driver** role here — or invite with any role and change it later on the Team page.
+  - **What Each Role Can Do** — a read-only matrix summarising each role's access (owner: everything; manager/fleet_manager: manager-level operations, dispatch, rules, waste audits, fleet; bookkeeper: financials, invoices, collections, waste-audit read; driver: the driver app only; viewer/investor: read-only, locked to the cash-basis `/investor` view).
+  - The **Team & Staff** quick-link card to `/settings/team`.
+- **Pricing & Bins** tab:
+  - **Bin Types** — bin type/pricing reference data.
+- **Bookings & Branding** tab:
+  - **Company Identity** — company name, ABN, ACN, registered address, accounts phone/email, BSB, bank account, penalty interest rate, plus a letterhead logo upload (PNG/JPG/SVG, max 2 MB). These values feed the collections letters — until they're filled in, letter sending is flagged as legally defective.
+  - **White-Label Widget** — the iframe embed snippet for `/embed/<slug>` partners.
+  - **Company Info** — read-only company name, location, financial year and platform version.
+- **Integrations** tab:
+  - **Xero** — connection status, connect button and sync controls (read-only sync of financials; a green "Xero Connected Successfully" toast confirms linking).
+  - **Claude AI Configuration** — the API key used by the AI chat assistant (overrides the environment variable; can be tested, rotated and removed).
 
 ### Team & Staff (`/settings/team`)
 
 Owner-only menu entry (the route itself renders for any office user; edits need owner/manager).
 
-1. The **Team Members** list shows each profile with a role badge. Owner/manager click **Edit** to change full name, phone, and role — roles selectable: owner, manager, bookkeeper, **driver**, fleet_manager, viewer. Setting someone to **driver** is what makes them appear in the Dispatch assignment dropdown and gives them the `/driver` portal experience.
+1. The **Team Members** list shows each profile with a role badge. Owner/manager click **Edit** to change full name, phone, and role — all seven roles selectable: owner, manager, bookkeeper, **driver**, fleet_manager, viewer, investor. Setting someone to **driver** is what makes them appear in the Dispatch assignment dropdown and gives them the `/driver` portal experience. (New users can also be invited directly with the driver role from Settings → Users & Roles.)
 2. Click a member to expand their **Recent Activity** (their audited inserts/updates/deletes).
 3. Below the list, the **Compliance panel** manages staff certificates and insurance policies with 30-day and 7-day expiry warnings.
 
