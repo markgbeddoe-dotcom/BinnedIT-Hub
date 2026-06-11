@@ -51,3 +51,7 @@ Sourced from the `_skipsync_migrations` audit table at apply time.
 - sha256: `a77d834b85cc697fe5cbfc88a2127b2ce5dbf7896ad89cd8d1477acb1d8852f8`
 - duration: 1008 ms
 
+## 2026-06-11T12:24:59.553Z — 028_profiles_team_rls.sql
+- sha256: `b94d3753411fa7d676cdb146dbf4ff145d94e6b68140659ff9add4ea6549a549`
+- duration: 1172 ms
+

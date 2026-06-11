@@ -42,7 +42,7 @@ P0 journeys. Updated by the Product Lead every session. ✅ pass (date) · ❌ f
 | # | Journey | Persona | Status |
 |---|---|---|---|
 | J1 | Invite a new user with role *driver* → they can sign in | Mark | ⬜ invite UI fixed + deployed 2026-06-11; end-to-end signup unproven |
-| J2 | Edit a team member's role/details in Team tab and it persists | Mark | ❌ Mark reports broken (2026-06-11) — suspect profiles UPDATE RLS; reproduce + fix |
+| J2 | Edit a team member's role/details in Team tab and it persists | Mark | ✅ 2026-06-11 — root cause was profiles UPDATE RLS (self-row only); migration 028 fixed; proven live (Andrew viewer→investor persisted through reload) |
 | J3 | Create job → assign driver/truck/date → job born/moves to Scheduled | Tracey | ⬜ panel renders (QA 2026-06-11); real assignment blocked on J1 (no drivers exist) |
 | J4 | Driver day: login → checklist gate → depart/arrive/start/complete with photos | Dave | ⬜ gate verified 2026-06-11; full chain blocked on J1/J3 |
 | J5 | Tip-or-Return decision after pickup records a load | Dave | ⬜ engine unit-tested; live blocked on J4 |
@@ -53,7 +53,7 @@ P0 journeys. Updated by the Product Lead every session. ✅ pass (date) · ❌ f
 | J10 | AI chat: "how do I…" answer + live tool action with visible audit chips | Mark | ✅ 2026-06-11 verified on live deploy (after SSE fix) |
 | J11 | Public booking → confirmation SMS/email → appears in CRM/dispatch | Customer→Tracey | ⬜ verified in earlier sprint; not re-proven on current deploy |
 
-**Pass-rate: 2/11 proven on current deploy.** That number is the honest baseline Mark called "~25% effective". It rises only via persona-run proof.
+**Pass-rate: 3/11 proven on current deploy** (J2 added 2026-06-11). That number is the honest baseline Mark called "~25% effective". It rises only via persona-run proof.
 
 ## Update protocol (per session)
 
