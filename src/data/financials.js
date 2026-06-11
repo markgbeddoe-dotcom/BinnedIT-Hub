@@ -179,6 +179,7 @@ export const dormantCustomers = [
 
 // Churn risk: customers with >40% drop in order frequency (recent 2 months vs prior 4 months avg)
 // avgPrior = avg jobs/month over Jul–Oct 2025; avgRecent = avg jobs/month Nov–Feb 2026; drop = %
+// NOTE: this analysis is AS AT Feb 2026 — month-keyed access via getMonthlySnapshot below.
 export const churnRiskCustomers = [
   {name:"ALLIED DEMOLITION PTY LTD",type:"Demolition",avgPrior:3.5,avgRecent:1.0,drop:71,revenue:8420,lastJob:"Jan 2026"},
   {name:"BAYSIDE BUILDING GROUP",type:"Builder",avgPrior:2.8,avgRecent:1.0,drop:64,revenue:5940,lastJob:"Feb 2026"},
@@ -189,3 +190,94 @@ export const churnRiskCustomers = [
   {name:"MORNINGTON SKIP HIRE CO",type:"Commercial",avgPrior:5.0,avgRecent:2.5,drop:50,revenue:14250,lastJob:"Feb 2026"},
   {name:"SEAFORD SHOPFITTERS",type:"Commercial",avgPrior:1.8,avgRecent:1.0,drop:44,revenue:2890,lastJob:"Feb 2026"},
 ];
+
+// ===== Month-keyed fallback snapshots (GAP-021 / GAP-022, 2026-06-10) =====
+//
+// The P&L series above (totalRevenue, totalCOS, cashIncome, …) are already
+// month-keyed: arrays indexed Jul 2025 → Feb 2026 (see `months`). The
+// snapshot-style datasets (bin performance, AR ageing, BDM lists, churn risk)
+// historically existed only as flat Feb 2026 constants, and every tab rendered
+// them for EVERY selected month as if they were that month's numbers (GAP-022).
+//
+// `monthlySnapshots` keys each snapshot dataset by 'YYYY-MM'. Only months with
+// a real source export are present (currently Feb 2026 only — Bin Manager +
+// Xero exports; see fallbackDataMetadata). `getMonthlySnapshot()` resolves the
+// requested month:
+//   - exact match            → { data, isProxy: false, asAtKey, asAtLabel }
+//   - no data for that month → nearest available snapshot with isProxy: true,
+//     so the UI can honour the never-break-the-dashboard fallback contract
+//     WHILE showing an explicit "data as at <asAtLabel>" guard instead of
+//     silently mislabelling stale Feb data as the selected month's actuals.
+//
+// When a new month's exports land, add a '<YYYY-MM>' entry here and every
+// consumer tab picks it up with zero code changes.
+
+export const FALLBACK_MONTH_KEYS = ['2025-07','2025-08','2025-09','2025-10','2025-11','2025-12','2026-01','2026-02'];
+
+/** Map a 0-based fallback month index (PricingTab's monthIndex) to 'YYYY-MM', or null when out of range. */
+export function monthKeyFromIndex(monthIndex) {
+  return FALLBACK_MONTH_KEYS[monthIndex] ?? null;
+}
+
+// Accepts 'YYYY-MM' or 'YYYY-MM-DD' (reportMonth format); returns 'YYYY-MM' or null.
+function normalizeMonthKey(monthKey) {
+  const s = String(monthKey || '').slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(s) ? s : null;
+}
+
+/** 'YYYY-MM' → 'Mon YYYY' (e.g. '2026-02' → 'Feb 2026'). Fixed lookup — not locale-dependent. */
+const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+export function monthLabelFromKey(monthKey) {
+  const key = normalizeMonthKey(monthKey);
+  if (!key) return '';
+  const [y, m] = key.split('-').map(Number);
+  if (m < 1 || m > 12) return '';
+  return `${MONTH_SHORT[m - 1]} ${y}`;
+}
+
+export const monthlySnapshots = {
+  '2026-02': {
+    binTypes: binTypesData,
+    ar: { buckets: arData, total: arTotal, overdue: arOverdue, topDebtors },
+    newCustomers: newCustomersFeb,
+    dormantCustomers,
+    churnRiskCustomers,
+  },
+};
+
+/**
+ * Resolve a snapshot dataset for a month.
+ *
+ * @param {string} dataset   One of: 'binTypes' | 'ar' | 'newCustomers' | 'dormantCustomers' | 'churnRiskCustomers'
+ * @param {string} monthKey  'YYYY-MM' or 'YYYY-MM-DD' (reportMonth)
+ * @returns {{ data: any, isProxy: boolean, asAtKey: string|null, asAtLabel: string }}
+ *   data      — the dataset rows (never undefined for known datasets — falls back to nearest month)
+ *   isProxy   — true when the data is NOT for the requested month (render an "as at" guard, suppress alerts)
+ *   asAtKey   — the month the data is actually from
+ *   asAtLabel — human label for asAtKey (e.g. 'Feb 2026')
+ */
+export function getMonthlySnapshot(dataset, monthKey) {
+  const key = normalizeMonthKey(monthKey);
+  const available = Object.keys(monthlySnapshots)
+    .filter(k => monthlySnapshots[k][dataset] !== undefined)
+    .sort();
+  if (available.length === 0) {
+    return { data: null, isProxy: true, asAtKey: null, asAtLabel: '' };
+  }
+  let asAtKey;
+  if (key && available.includes(key)) {
+    asAtKey = key;
+  } else {
+    // Prefer the latest snapshot on/before the requested month; if the
+    // request predates all snapshots (or the key is invalid), use the latest
+    // available so the dashboard always renders something — flagged isProxy.
+    const onOrBefore = key ? available.filter(k => k <= key) : [];
+    asAtKey = onOrBefore.length > 0 ? onOrBefore[onOrBefore.length - 1] : available[available.length - 1];
+  }
+  return {
+    data: monthlySnapshots[asAtKey][dataset],
+    isProxy: asAtKey !== key,
+    asAtKey,
+    asAtLabel: monthLabelFromKey(asAtKey),
+  };
+}
