@@ -40,6 +40,9 @@ import CRMBookingsPage from './components/CRMBookingsPage';
 import CollectionsPage from './components/CollectionsPage';
 import DriverApp from './components/driver/DriverApp';
 import NotificationBell from './components/NotificationBell';
+import RulesEnginePage from './components/RulesEnginePage';
+import WasteAuditPanel from './components/WasteAuditPanel';
+import RequireRole from './components/RequireRole';
 
 // React Query hooks
 import { useAvailableMonths } from './hooks/useMonthData';
@@ -100,12 +103,14 @@ const menuItems = [
   {id:'customers',icon:'👥',label:'Customers',section:null},
   {id:'invoices',icon:'🧾',label:'Invoices',section:null},
   {id:'collections',icon:'⚖️',label:'Collections',section:null},
+  {id:'waste-audits',icon:'📷',label:'Waste Audits',section:null, officeOnly: true}, // managers + Sarah (manual Xero invoicing)
   // Reports section
   {id:'dashboard',icon:'📊',label:'Reports',section:'REPORTS'},
   {id:'history',icon:'🗓️',label:'Monthly History',section:null},
   {id:'month-select',icon:'📥',label:'Load Data',section:null},
   // System
   {id:'settings',icon:'⚙️',label:'Settings',section:'SYSTEM'},
+  {id:'rules',icon:'📐',label:'Rules Engine',section:null, managerOnly: true},
   {id:'settings/audit',icon:'📜',label:'Audit Log',section:null, ownerOnly: true},
   {id:'settings/team',icon:'👥',label:'Team',section:null, ownerOnly: true},
   {id:'about',icon:'ℹ️',label:'About',section:null},
@@ -126,7 +131,7 @@ export default function App() {
   });
 
   const { isMobile } = useBreakpoint();
-  const { profile, isOwner } = useAuth();
+  const { profile, isOwner, isManager, isBookkeeper } = useAuth();
   const greetingName = profile?.full_name?.split(' ')[0] || 'there';
 
   // Sprint 17 #17D — accounting basis toggle (cash | accrual). Investor/viewer
@@ -173,6 +178,8 @@ export default function App() {
     : location.pathname === '/drivers' ? 'drivers'
     : location.pathname === '/invoices' ? 'invoices'
     : location.pathname === '/collections' ? 'collections'
+    : location.pathname === '/rules' ? 'rules'
+    : location.pathname === '/waste-audits' ? 'waste-audits'
     : 'home';
 
   const goHome = () => { navigate('/home'); setMenuOpen(false); };
@@ -549,7 +556,12 @@ export default function App() {
         <div style={{fontSize:11,color:'#888',marginTop:2}}>Operations Platform v{VERSION}</div>
       </div>
       <div style={{flex:1,padding:'8px 0',overflowY:'auto'}}>
-        {menuItems.filter(item => !item.ownerOnly || isOwner).map(item => (<React.Fragment key={item.id}>
+        {menuItems
+          .filter(item =>
+            (!item.ownerOnly || isOwner) &&
+            (!item.managerOnly || isManager) &&
+            (!item.officeOnly || isManager || isBookkeeper))
+          .map(item => (<React.Fragment key={item.id}>
           {item.section && (
             <div style={{padding:'10px 20px 4px',fontSize:9,fontFamily:fontHead,fontWeight:700,letterSpacing:'0.12em',color:'#555',textTransform:'uppercase',borderTop:item.section!=='OPERATIONS'?`1px solid #222`:'none',marginTop:item.section!=='OPERATIONS'?8:0}}>
               {item.section}
@@ -693,6 +705,19 @@ export default function App() {
         <Route path="/collections" element={<CollectionsPage />} />
         <Route path="/drivers" element={<DriverApp />} />
         <Route path="/settings" element={<SettingsPage />} />
+        {/* WP-F (R6): rules engine — owner/manager/fleet_manager only (GAP-030) */}
+        <Route path="/rules" element={
+          <RequireRole roles={['owner', 'manager', 'fleet_manager']}>
+            <div style={{maxWidth:1100,margin:'0 auto',padding:'20px 24px'}}><RulesEnginePage /></div>
+          </RequireRole>
+        } />
+        {/* WP-D (R5): waste-audit review queue — office roles; Sarah needs read
+            access to invoice approved adjustments manually (Xero stays read-only) */}
+        <Route path="/waste-audits" element={
+          <RequireRole roles={['owner', 'manager', 'fleet_manager', 'bookkeeper']}>
+            <div style={{maxWidth:1100,margin:'0 auto',padding:'20px 24px'}}><WasteAuditPanel /></div>
+          </RequireRole>
+        } />
         <Route path="/settings/audit" element={<AuditLogPage />} />
         <Route path="/settings/team" element={<TeamPage />} />
         <Route path="/about" element={<AboutScreen />} />
