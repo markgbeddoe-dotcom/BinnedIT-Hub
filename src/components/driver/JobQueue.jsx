@@ -181,8 +181,45 @@ export default function JobQueue({ driverId, checklistDone = false, onOpenCheckl
         </div>
       )}
 
-      {/* Job cards */}
-      {displayJobs.length === 0 ? (
+      {/* HARD BLOCK (belt-and-braces, FR7.2.6 / ux-spec §3.3): even if a deep
+          link or parent bug lands here with checklistDone=false, no job cards
+          (and therefore no action buttons) render until the checklist passes. */}
+      {!checklistDone ? (
+        <div
+          data-testid="jobqueue-checklist-gate"
+          style={{
+            textAlign: 'center', padding: '40px 20px',
+            background: '#1A1A2E', borderRadius: 12,
+            border: `1px solid ${B.amber}`,
+          }}
+        >
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontFamily: fontHead, fontSize: 18, color: B.amber, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Jobs Locked
+          </div>
+          <div style={{ color: '#aaa', fontSize: 14, marginTop: 8, lineHeight: 1.5 }}>
+            Shift blocked until your pre-start vehicle checklist passes.
+            {jobs.length > 0 && (
+              <> {jobs.length} job{jobs.length !== 1 ? 's' : ''} waiting.</>
+            )}
+          </div>
+          {onOpenChecklist && (
+            <button
+              onClick={onOpenChecklist}
+              data-testid="jobqueue-gate-checklist-btn"
+              style={{
+                marginTop: 16, width: '100%', maxWidth: 320, minHeight: 48,
+                background: B.yellow, color: B.black, border: 'none',
+                borderRadius: 8, fontFamily: fontHead, fontSize: 15,
+                fontWeight: 700, textTransform: 'uppercase',
+                letterSpacing: '0.05em', cursor: 'pointer',
+              }}
+            >
+              ✅ Start Checklist
+            </button>
+          )}
+        </div>
+      ) : displayJobs.length === 0 ? (
         <div style={{
           textAlign: 'center', padding: '48px 20px',
           background: '#1A1A2E', borderRadius: 12,

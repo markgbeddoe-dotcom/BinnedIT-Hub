@@ -3,6 +3,8 @@ import { B, fontHead, fontBody } from '../../theme'
 import { recordJobEvent, updateJobStatus, uploadJobPhoto, hasDeliveryPhoto } from '../../api/driver'
 import PhotoCapture from './PhotoCapture'
 import HazardReport from './HazardReport'
+import NavigateButton from './NavigateButton'
+import TipDecisionScreen from './TipDecisionScreen'
 import { nextAllowedActions, isActionAllowed, STATUS_LABEL } from './jobStateMachine'
 
 const STATUS_COLOR = {
@@ -36,10 +38,7 @@ export default function JobCard({ job, driverId, checklistDone = false, onStatus
   const [localStatus, setLocalStatus] = useState(job.status)
   const [feedback, setFeedback] = useState('')
   const [deliveryPhotoTaken, setDeliveryPhotoTaken] = useState(false)
-
-  const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-    [job.address, job.suburb, job.postcode].filter(Boolean).join(', ')
-  )}`
+  const [showTipDecision, setShowTipDecision] = useState(false)
 
   // On mount / status change, ask Supabase whether this job already
   // has a delivery photo (covers the case where it was uploaded in a
@@ -282,23 +281,14 @@ export default function JobCard({ job, driverId, checklistDone = false, onStatus
               </div>
             )}
 
-            {/* Navigate button */}
-            <a
-              href={mapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'block', width: '100%', padding: '16px',
-                background: B.blue, color: B.white, border: 'none', borderRadius: 8,
-                fontSize: 18, fontFamily: fontHead, fontWeight: 700,
-                textTransform: 'uppercase', letterSpacing: '0.06em',
-                textAlign: 'center', textDecoration: 'none',
-                marginBottom: 12,
-                boxSizing: 'border-box',
-              }}
-            >
-              📍 Navigate
-            </a>
+            {/* Navigate — geocoded coords when present, address text otherwise */}
+            <div style={{ marginBottom: 12 }}>
+              <NavigateButton
+                lat={job.lat}
+                lng={job.lng}
+                address={[job.address, job.suburb, job.postcode].filter(Boolean).join(', ')}
+              />
+            </div>
 
             {/* Action buttons — driven by state machine */}
             {!isCompleted && (
@@ -454,6 +444,24 @@ export default function JobCard({ job, driverId, checklistDone = false, onStatus
               })}
             </div>
 
+            {/* Tip decision (WP-E, R4) — once the load is on the truck */}
+            {(isInProgress || isCompleted) && (
+              <button
+                onClick={() => setShowTipDecision(true)}
+                data-testid="job-tip-decision"
+                style={{
+                  width: '100%', padding: '14px', marginBottom: 12,
+                  background: '#1A2B0F',
+                  border: `1px solid ${B.teal}`,
+                  borderRadius: 8, cursor: 'pointer',
+                  color: B.teal, fontSize: 15,
+                  fontFamily: fontHead, textTransform: 'uppercase', letterSpacing: '0.06em',
+                }}
+              >
+                🗑 Tip or Return?
+              </button>
+            )}
+
             {/* Hazard report */}
             <button
               onClick={() => setShowHazard(true)}
@@ -493,6 +501,20 @@ export default function JobCard({ job, driverId, checklistDone = false, onStatus
           onCapture={handlePhotoCapture}
           onClose={() => setPhotoType(null)}
           uploading={photoUploading}
+        />
+      )}
+
+      {/* Tip-vs-return decision overlay */}
+      {showTipDecision && (
+        <TipDecisionScreen
+          job={job}
+          driverId={driverId}
+          onClose={() => setShowTipDecision(false)}
+          onDecided={(opt) => {
+            setFeedback(opt.type === 'tip_then_next_job'
+              ? `✓ Tipping at ${opt.tipSite?.name || 'site'}`
+              : '✓ Returning to base')
+          }}
         />
       )}
 

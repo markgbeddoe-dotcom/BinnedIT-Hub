@@ -6,7 +6,13 @@ import { B, fontHead, fontBody } from '../../theme'
 import DriverLogin from './DriverLogin'
 import JobQueue from './JobQueue'
 import VehicleChecklist from './VehicleChecklist'
-import { getTodayChecklist } from '../../api/driver'
+import { getTodayChecklist, getChecklistBlockShiftRule, getTodayJobs } from '../../api/driver'
+import { useLocationPublisher } from '../../hooks/useLocationPublisher'
+
+// PLACEHOLDER — integrator/Mark: replace with the real Binned-IT dispatch
+// number (or read from platform_settings). Used by the failed-gate
+// "Call Dispatch" button only.
+const DISPATCH_PHONE = '+61390000000'
 
 /**
  * DriverApp — Full-screen mobile driver portal at /driver
@@ -29,15 +35,56 @@ export default function DriverApp() {
   const navigate = useNavigate()
   const { isDesktop } = useBreakpoint()
   const [screen, setScreen] = useState('jobs') // 'jobs' | 'checklist'
-  const [checklistDone, setChecklistDone] = useState(false)
+  const [todayChecklist, setTodayChecklist] = useState(null) // today's vehicle_checklists row or null
+  const [checklistLoading, setChecklistLoading] = useState(true)
+  const [blockOnFail, setBlockOnFail] = useState(true) // rules engine: checklist_block_shift (fail closed)
+  const [jobCount, setJobCount] = useState(null) // teaser count for the gate screen
   const [menuOpen, setMenuOpen] = useState(false)
 
-  // On mount, check if driver has already done today's checklist
+  // HARD GATE (GAP-005 / FR7.2.5): checklistDone ONLY when today's row has
+  // passed === true — the DB generated column is the single source of truth.
+  const checklistDone = todayChecklist?.passed === true
+  // Warn-mode relaxation (FR7.2.8): a FAILED checklist only unlocks jobs if
+  // Mark has explicitly set rule checklist_block_shift=false. A MISSING
+  // checklist never unlocks anything.
+  const jobsUnlocked = checklistDone || (Boolean(todayChecklist) && !blockOnFail)
+
+  // WP-C (R3): publish live GPS to dispatch while the shift is active.
+  // Consent-gated (ADR-701) — publishes nothing until the driver opts in.
+  const {
+    publishing: gpsPublishing,
+    consentGiven: gpsConsent,
+    grantConsent: grantGpsConsent,
+  } = useLocationPublisher({
+    enabled: Boolean(session?.user?.id) && jobsUnlocked,
+    driverId: session?.user?.id || null,
+    truckId: todayChecklist?.truck_id || null,
+  })
+
+  // On mount, load today's checklist row + the block-shift rule
   useEffect(() => {
     if (!session?.user?.id) return
-    getTodayChecklist(session.user.id)
-      .then(c => { if (c) setChecklistDone(true) })
-      .catch(() => {})
+    let alive = true
+    setChecklistLoading(true)
+    Promise.all([
+      getTodayChecklist(session.user.id).catch(() => null),
+      getChecklistBlockShiftRule().catch(() => true),
+    ]).then(([row, block]) => {
+      if (!alive) return
+      setTodayChecklist(row)
+      setBlockOnFail(block !== false) // anything but explicit false blocks
+      setChecklistLoading(false)
+    })
+    return () => { alive = false }
+  }, [session])
+
+  // Teaser job count for the gate screen ("3 jobs waiting") — count only,
+  // no job details leak pre-checklist. Best-effort.
+  useEffect(() => {
+    if (!session?.user?.id) return
+    getTodayJobs(session.user.id)
+      .then(jobs => setJobCount(jobs.length))
+      .catch(() => setJobCount(null))
   }, [session])
 
   // Outer-shell style — safe-area insets on every code path so the notch and
@@ -87,16 +134,18 @@ export default function DriverApp() {
   }
 
   // Pre-start checklist screen — wrap so safe-area + desktop frame apply here too.
+  // onClose is ONLY passed when today's checklist already passed (menu re-entry
+  // view). When used as the pre-shift gate there is no close-X escape (FR7.2.4).
   if (screen === 'checklist') {
     return (
       <div style={shellStyle}>
         <VehicleChecklist
           driverId={session.user.id}
-          onComplete={(passed) => {
-            setChecklistDone(true)
+          onComplete={(row) => {
+            if (row) setTodayChecklist(row)
             setScreen('jobs')
           }}
-          onClose={() => setScreen('jobs')}
+          onClose={checklistDone ? () => setScreen('jobs') : undefined}
         />
       </div>
     )
@@ -138,6 +187,9 @@ export default function DriverApp() {
 
         {/* Logo — right side */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 44 }}>
+          {gpsPublishing && (
+            <span style={{ color: B.blue, fontSize: 16 }} title="Sharing live location with dispatch">📡</span>
+          )}
           {checklistDone && (
             <span style={{ color: B.green, fontSize: 20 }} title="Pre-start checklist complete">✓</span>
           )}
@@ -160,10 +212,12 @@ export default function DriverApp() {
         </div>
       </div>
 
-      {/* Checklist nudge banner (if not done yet) */}
-      {!checklistDone && (
+      {/* Warn-mode banner — only when a FAILED checklist exists AND the
+          checklist_block_shift rule was explicitly relaxed (FR7.2.8). */}
+      {!checklistLoading && jobsUnlocked && !checklistDone && (
         <div
           onClick={() => setScreen('checklist')}
+          data-testid="driver-checklist-warn-banner"
           style={{
             background: '#2B1A0F',
             border: `1px solid ${B.amber}`,
@@ -181,10 +235,10 @@ export default function DriverApp() {
             <span style={{ fontSize: 20 }}>⚠️</span>
             <div>
               <div style={{ color: B.amber, fontFamily: fontHead, fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Pre-Start Checklist Needed
+                Checklist Failed — Defect Logged
               </div>
               <div style={{ color: '#888', fontSize: 12, marginTop: 2 }}>
-                Complete before starting jobs today
+                Shift allowed by dispatch rule. Tap to re-run the checklist.
               </div>
             </div>
           </div>
@@ -192,14 +246,59 @@ export default function DriverApp() {
         </div>
       )}
 
-      {/* Main content — inner max-width is now the shell's responsibility,
-          so we just pad here. */}
+      {/* WP-C (R3): first-use location consent — shown once the shift is
+          active and consent has loaded as not-yet-given. */}
+      {!checklistLoading && jobsUnlocked && gpsConsent === false && (
+        <div
+          data-testid="driver-gps-consent-banner"
+          style={{
+            background: '#0F1B2B',
+            border: `1px solid ${B.blue}`,
+            padding: '12px 16px',
+            margin: '12px 16px',
+            borderRadius: 8,
+          }}
+        >
+          <div style={{ color: B.white, fontSize: 14, lineHeight: 1.5 }}>
+            📡 Share your live location with dispatch while on shift? It powers the
+            live map and only runs while the app is open.
+          </div>
+          <button
+            onClick={grantGpsConsent}
+            data-testid="driver-gps-consent-allow"
+            style={{
+              marginTop: 10, width: '100%', minHeight: 44,
+              background: B.blue, color: B.white, border: 'none', borderRadius: 8,
+              fontFamily: fontHead, fontSize: 14, fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer',
+            }}
+          >
+            Share Location
+          </button>
+        </div>
+      )}
+
+      {/* Main content — HARD GATE: jobs are not reachable until today's
+          checklist passes (or warn-mode rule relaxes a failed one). */}
       <div style={{ padding: '16px', paddingBottom: 32 }}>
-        <JobQueue
-          driverId={session.user.id}
-          checklistDone={checklistDone}
-          onOpenChecklist={() => setScreen('checklist')}
-        />
+        {checklistLoading ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh', flexDirection: 'column', gap: 12 }}>
+            <div style={{ color: B.yellow, fontSize: 36 }}>⏳</div>
+            <div style={{ color: '#aaa', fontSize: 15 }}>Checking pre-start status…</div>
+          </div>
+        ) : !jobsUnlocked ? (
+          <ChecklistGate
+            failed={Boolean(todayChecklist) && todayChecklist.passed === false}
+            jobCount={jobCount}
+            onStartChecklist={() => setScreen('checklist')}
+          />
+        ) : (
+          <JobQueue
+            driverId={session.user.id}
+            checklistDone={jobsUnlocked}
+            onOpenChecklist={() => setScreen('checklist')}
+          />
+        )}
       </div>
 
       {/* Side menu overlay. Drawer width caps at min(280px, 85vw) so it fits
@@ -282,6 +381,86 @@ export default function DriverApp() {
             </div>
           </div>
         </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * ChecklistGate — blocking screen shown instead of the job queue until
+ * today's checklist passes (ux-spec-v7 §3.1). Two variants:
+ *  - default: lock + "PRE-START REQUIRED" + START CHECKLIST
+ *  - failed:  amber "CHECKLIST FAILED — DEFECT LOGGED" + RE-RUN + CALL DISPATCH
+ * Teaser shows a job COUNT only — no actionable detail leaks pre-checklist.
+ */
+function ChecklistGate({ failed, jobCount, onStartChecklist }) {
+  return (
+    <div
+      data-testid="driver-checklist-gate"
+      style={{ textAlign: 'center', paddingTop: '8vh', paddingBottom: 24 }}
+    >
+      <div style={{ fontSize: 48, marginBottom: 16 }}>{failed ? '⚠️' : '🔒'}</div>
+
+      <div style={{
+        fontFamily: fontHead, fontSize: 22, letterSpacing: '0.05em',
+        textTransform: 'uppercase', color: failed ? B.amber : B.yellow,
+        marginBottom: 12,
+      }}>
+        {failed ? 'Checklist Failed — Defect Logged' : 'Pre-Start Required'}
+      </div>
+
+      <div style={{ color: '#ccc', fontSize: 15, lineHeight: 1.5, maxWidth: 320, margin: '0 auto 24px' }}>
+        {failed
+          ? 'Fleet manager notified. Fix the issue and re-run the checklist, or wait for dispatch.'
+          : "You can't see today's jobs until your vehicle checklist is complete."}
+      </div>
+
+      <button
+        onClick={onStartChecklist}
+        data-testid={failed ? 'gate-rerun-checklist' : 'gate-start-checklist'}
+        style={{
+          width: '100%', maxWidth: 360, minHeight: 56,
+          background: failed ? B.amber : B.yellow, color: B.black,
+          border: 'none', borderRadius: 8,
+          fontFamily: fontHead, fontSize: 18, fontWeight: 700,
+          textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer',
+        }}
+      >
+        {failed ? 'Re-Run Checklist' : '✅ Start Checklist'}
+      </button>
+
+      {failed && (
+        <a
+          href={`tel:${DISPATCH_PHONE}`}
+          data-testid="gate-call-dispatch"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: '100%', maxWidth: 360, minHeight: 48, margin: '10px auto 0',
+            background: 'none', color: '#aaa', border: '1px solid #444',
+            borderRadius: 8, fontFamily: fontHead, fontSize: 15,
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+            textDecoration: 'none', boxSizing: 'border-box',
+          }}
+        >
+          📞 Call Dispatch
+        </a>
+      )}
+
+      {!failed && typeof jobCount === 'number' && jobCount > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ color: '#888', fontSize: 14, marginBottom: 10 }}>
+            {jobCount} job{jobCount !== 1 ? 's' : ''} waiting for you
+          </div>
+          {/* Blurred ghost rows — motivation without leaking detail */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 360, margin: '0 auto' }}>
+            {Array.from({ length: Math.min(jobCount, 3) }).map((_, i) => (
+              <div key={i} style={{
+                height: 18, borderRadius: 4, background: '#1A1A2E',
+                opacity: 0.7 - i * 0.15, filter: 'blur(1px)',
+              }} />
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )
