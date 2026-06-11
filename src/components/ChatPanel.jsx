@@ -2,17 +2,34 @@ import React, { useState, useRef, useEffect } from 'react';
 import { B, fontHead, fontBody, fmtFull } from '../theme';
 import * as D from '../data/financials';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 
 const SUGGESTED_QUESTIONS = [
+  "How do I schedule a new service?",
+  "How do I add a driver to a job?",
+  "Schedule all of today's unassigned jobs",
+  "Who's on the roster today?",
   "What's my biggest cash flow risk?",
-  "How does this month compare to last month?",
-  "Which bin type has the worst margin?",
-  "What compliance items are due soon?",
 ];
+
+// Friendly verbs for tool activity lines
+const TOOL_LABELS = {
+  get_jobs: 'Checking jobs',
+  get_roster: 'Checking drivers & trucks',
+  get_business_rules: 'Checking business rules',
+  assign_job: 'Assigning job',
+};
+
+function activityLabel(a) {
+  const verb = TOOL_LABELS[a.name] || a.name;
+  if (a.status === 'running') return `⚙ ${verb}…`;
+  if (a.status === 'error') return `⚠ ${a.summary || `${verb} failed`}`;
+  return `✓ ${a.summary || `${verb} done`}`;
+}
 
 export default function ChatPanel({ open, onClose, selectedMonth, monthCount, selLabel, isMobile }) {
   const [chatMsgs, setChatMsgs] = useState([
-    { role: 'assistant', text: 'Hi Mark! Ask me anything about your dashboard, reports, or business.' }
+    { role: 'assistant', text: "Hi Mark! I can explain how to use SkipSync — and for managers, I can take dispatch actions too: check jobs and the roster, and assign drivers and trucks. What do you need?" }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -53,9 +70,13 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
         content: m.text,
       }));
 
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers = { 'Content-Type': 'application/json' };
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           messages: [...history, { role: 'user', content: userMsg }],
           reportMonth: selectedMonth || '2026-02',
@@ -75,9 +96,18 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
       const decoder = new TextDecoder();
       let buffer = '';
       let accumulatedText = '';
+      let activity = []; // [{ name, status, summary }] — tool audit trail for this reply
 
       // Add empty assistant message to fill in
-      setChatMsgs(prev => [...prev, { role: 'assistant', text: '' }]);
+      setChatMsgs(prev => [...prev, { role: 'assistant', text: '', activity: [] }]);
+
+      const pushUpdate = () => {
+        setChatMsgs(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: 'assistant', text: accumulatedText, activity: [...activity] };
+          return updated;
+        });
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -93,14 +123,22 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
             if (data === '[DONE]') continue;
             try {
               const parsed = JSON.parse(data);
-              if (parsed.text) {
+              if (typeof parsed.text === 'string' && parsed.text) {
                 accumulatedText += parsed.text;
-                setChatMsgs(prev => {
-                  const updated = [...prev];
-                  updated[updated.length - 1] = { role: 'assistant', text: accumulatedText };
-                  return updated;
-                });
+                pushUpdate();
               }
+              if (parsed.tool && parsed.tool.name) {
+                const t = { name: parsed.tool.name, status: parsed.tool.status || 'running', summary: parsed.tool.summary || '' };
+                // Resolve the matching in-flight "running" entry, otherwise stack a new line
+                let idx = -1;
+                for (let k = activity.length - 1; k >= 0; k--) {
+                  if (activity[k].name === t.name && activity[k].status === 'running') { idx = k; break; }
+                }
+                if (idx >= 0 && t.status !== 'running') activity[idx] = t;
+                else activity.push(t);
+                pushUpdate();
+              }
+              // Unknown keys are ignored — text accumulation continues regardless
             } catch {
               // Skip malformed
             }
@@ -108,7 +146,7 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
         }
       }
 
-      if (!accumulatedText) {
+      if (!accumulatedText && activity.length === 0) {
         setChatMsgs(prev => {
           const updated = [...prev];
           updated[updated.length - 1] = { role: 'assistant', text: 'Sorry, I could not process that request.' };
@@ -121,7 +159,7 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
         // Check if last message is empty assistant — replace it; otherwise add new one
         if (prev[prev.length - 1]?.role === 'assistant' && prev[prev.length - 1]?.text === '') {
           const updated = [...prev];
-          updated[updated.length - 1] = { role: 'assistant', text: `Connection issue: ${e.message || 'Please try again.'}` };
+          updated[updated.length - 1] = { ...updated[updated.length - 1], role: 'assistant', text: `Connection issue: ${e.message || 'Please try again.'}` };
           return updated;
         }
         return [...prev, { role: 'assistant', text: `Connection issue: ${e.message || 'Please try again.'}` }];
@@ -156,11 +194,25 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
           {/* Messages */}
           <div style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {chatMsgs.map((m, i) => (
-              <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', background: m.role === 'user' ? B.yellow : B.bg, color: m.role === 'user' ? '#fff' : B.textPrimary, borderRadius: 12, padding: '10px 14px', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                {m.text || (m.role === 'assistant' && chatLoading ? '...' : '')}
+              <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {/* Tool activity audit trail — muted rows, not chat bubbles */}
+                {m.role === 'assistant' && (m.activity || []).length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '2px 4px' }}>
+                    {m.activity.map((a, j) => (
+                      <div key={j} style={{ display: 'inline-flex', alignItems: 'center', alignSelf: 'flex-start', background: B.cardBgHover, border: `1px solid ${B.cardBorder}`, borderRadius: 10, padding: '3px 9px', fontSize: 11, lineHeight: 1.4, color: a.status === 'error' ? B.red : B.textMuted, fontFamily: fontBody, fontStyle: a.status === 'running' ? 'italic' : 'normal' }}>
+                        {activityLabel(a)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(m.text || m.role === 'user' || (m.activity || []).length === 0) && (
+                  <div style={{ background: m.role === 'user' ? B.yellow : B.bg, color: m.role === 'user' ? '#fff' : B.textPrimary, borderRadius: 12, padding: '10px 14px', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                    {m.text || (m.role === 'assistant' && chatLoading ? '...' : '')}
+                  </div>
+                )}
               </div>
             ))}
-            {chatLoading && chatMsgs[chatMsgs.length - 1]?.text === '' && (
+            {chatLoading && chatMsgs[chatMsgs.length - 1]?.text === '' && (chatMsgs[chatMsgs.length - 1]?.activity || []).length === 0 && (
               <div style={{ alignSelf: 'flex-start', background: B.bg, borderRadius: 12, padding: '10px 14px', fontSize: 13, color: B.textMuted }}>
                 Thinking...
               </div>
