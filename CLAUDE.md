@@ -1,5 +1,13 @@
 # SkipSync — Claude Code Instructions
 
+## Agent system — READ FIRST, EVERY SESSION
+This project runs on a persistent agent system with compounding memory. Before any work:
+1. Read `agents/PM.md` (Alex Voss, Product Lead — owns direction, quality gates, the learning loop) and `agents/REGISTRY.md` (agent index + Journey Board).
+2. Load the Learnings Logs of whichever agents the day's work touches (personas in `agents/personas/`, Meg in `agents/Accountant.md`).
+3. Nothing is "done" until the affected personas' journeys pass **on the live deploy** (Playwright/API as that persona, both viewports where relevant).
+4. Session close = PM closing protocol (PM.md §6): update the Journey Board, append dated learnings (root cause + what changes next run) to every agent used, commit the registry.
+Skipping this protocol is the failure mode Mark explicitly called out (2026-06-11: "we are losing far too much and not improving"). Do not skip it.
+
 ## Project
 **SkipSync** (formerly "Binned-IT Dashboard Hub" / "Binned-IT Hub" — same product). React 18 + Vite SPA. Supabase PostgreSQL + Auth. Vercel deployment. TanStack Query v5. React Router v7.
 
