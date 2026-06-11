@@ -27,3 +27,27 @@ Sourced from the `_skipsync_migrations` audit table at apply time.
 - sha256: `cfcfdc35990ee297ed3cfd8a0319a2c499938b8f1ca23932251c568869be1be0`
 - duration: 1107 ms
 
+## 2026-06-11T07:27:32.621Z — 022_roles_expansion.sql
+- sha256: `ab3d2b0c5686d011f9072ed89a8446ed4ce66f6249435910d015abbf9f5fae62`
+- duration: 1098 ms
+
+## 2026-06-11T07:27:37.168Z — 023_driver_locations.sql
+- sha256: `a36db1e7b31b7bd53c1bdab8ff5bb9694ee8058b98dd8ea4a0721724415123d2`
+- duration: 1105 ms
+
+## 2026-06-11T07:27:41.653Z — 024_waste_audits.sql
+- sha256: `0fc4420c61030072df98fbb2a4ecdcc234d6412753b52c6f5aa129d19143ed94`
+- duration: 1049 ms
+
+## 2026-06-11T07:27:52.528Z — 025_tip_sites_loads.sql
+- sha256: `e81896befbcdab346146dcdc896e7cf1549b704002717716562623f7f215a5b1`
+- duration: 1015 ms
+
+## 2026-06-11T07:27:57.246Z — 026_business_rules.sql
+- sha256: `e1fb4f13dd9055dd4b012272e0dd28931c8cb3039515fa5ebe50509ad00df884`
+- duration: 1195 ms
+
+## 2026-06-11T07:28:01.588Z — 027_ai_insights.sql
+- sha256: `a77d834b85cc697fe5cbfc88a2127b2ce5dbf7896ad89cd8d1477acb1d8852f8`
+- duration: 1008 ms
+
