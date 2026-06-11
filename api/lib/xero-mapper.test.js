@@ -845,6 +845,233 @@ describe('parsePLSections', () => {
   })
 })
 
+// ── WP-I (2026-06-10) — full real chart-of-accounts coverage ────────────────
+//
+// GAP-017 / GAP-018 verification: every row name below is taken verbatim from
+// the actual Binned-IT Xero FY2026 export
+// (docs/audits/2026-05-06/parsed/Binned-IT_Pty_Ltd_-_Current_financial_year_by_month.json),
+// amounts are the Year-to-date column. The expected bucket is hand-assigned per
+// row, so these tables are the executable classification spec: if ANY rule in
+// PREFIXED_RULES / KEYWORD_RULES / classifyCOSRow regresses, the per-row test
+// and the aggregate-sum test both fail with the offending account name.
+
+const REAL_TRADING_INCOME_YTD = [
+  // ── ASB prefix family + asbestos keywords → asbestos ──
+  { name: 'ASB  -1.1', amount: 12002.74, bucket: 'asbestos' },
+  { name: 'ASB - 10m', amount: 18440.91, bucket: 'asbestos' },
+  { name: 'ASB - 16m', amount: 10190, bucket: 'asbestos' },
+  { name: 'ASB - 23m', amount: 28000, bucket: 'asbestos' },
+  { name: 'ASB - 2M', amount: 6700, bucket: 'asbestos' },
+  { name: 'ASB - 4m', amount: 66215.46, bucket: 'asbestos' },
+  { name: 'ASB - 6m', amount: 67944.61, bucket: 'asbestos' },
+  { name: 'ASB - 8m', amount: 50770.35, bucket: 'asbestos' },
+  { name: 'ASB - Bigm', amount: 35810, bucket: 'asbestos' },
+  { name: 'ASBESTOS 2M', amount: 900, bucket: 'asbestos' },
+  { name: 'Asbestos Waste Tonnage', amount: 8287.35, bucket: 'asbestos' },
+  { name: 'Revenue - Asbestos (ASB)', amount: 6000.2, bucket: 'asbestos' },
+  // ── CON prefix family (concrete) → general ──
+  { name: 'CON - 4m FOR JOBS NOT RECYCLING', amount: 7400, bucket: 'general' },
+  { name: 'CON - 6m FOR JOBS NOT RECYCLING', amount: 16500, bucket: 'general' },
+  { name: 'CON - 8m FOR JOBS NOT RECYCLING', amount: 8718.18, bucket: 'general' },
+  // ── soil keywords (NB: 'CONTAMINATED...' must NOT false-match the CON- prefix) ──
+  { name: 'CONTAMINATED SOIL REVENUE', amount: 6900, bucket: 'soil' },
+  { name: 'Contaminated Soil Tonnage', amount: 91718.15, bucket: 'soil' },
+  { name: 'Revenue - Soil (SOI)', amount: 13040, bucket: 'soil' },
+  // ── SOI prefix family → soil ──
+  { name: 'SOI - 4m FOR JOBS NOT RECYCLING', amount: 27636.36, bucket: 'soil' },
+  { name: 'SOI - 6m FOR JOBS NOT RECYCLING', amount: 36581.82, bucket: 'soil' },
+  { name: 'SOI - 8m FOR JOBS NOT RECYCLING', amount: 41608.65, bucket: 'soil' },
+  // ── GRW prefix family → green ──
+  { name: 'GRW - 10m GREEN WASTE', amount: 9273.97, bucket: 'green' },
+  { name: 'GRW - 16m GREEN WASTE', amount: 6960.73, bucket: 'green' },
+  { name: 'GRW - 4m GREEN WASTE', amount: 4850, bucket: 'green' },
+  { name: 'GRW - 8m GREEN WASTE', amount: 14643.33, bucket: 'green' },
+  // ── WMF prefix family (the $882k YTD that GAP-017 claimed fell into rev_other) ──
+  { name: 'WMF - 10M', amount: 65868.18, bucket: 'general' },
+  { name: 'WMF - 12M', amount: 148376.62, bucket: 'general' },
+  { name: 'WMF - 12m Light', amount: 44438.73, bucket: 'general' },
+  { name: 'WMF - 16m', amount: 49031.52, bucket: 'general' },
+  { name: 'WMF - 23m', amount: 44611.83, bucket: 'general' },
+  { name: 'WMF - 4m Heavy', amount: 133419.1, bucket: 'general' },
+  { name: 'WMF - 4m Light', amount: 18213.64, bucket: 'general' },
+  { name: 'WMF - 6m Heavy', amount: 232403.82, bucket: 'general' },
+  { name: 'WMF - 6m Light', amount: 29160.91, bucket: 'general' },
+  { name: 'WMF - 8m Heavy', amount: 103643.64, bucket: 'general' },
+  { name: 'WMF - 8m Light', amount: 13322.48, bucket: 'general' },
+  // negative YTD (net customer credits) — sign must be preserved
+  { name: 'Revenue - Waste Management Fees (WMF)', amount: -169.8, bucket: 'general' },
+  // ── ancillary revenue keywords → general (Transport / Tonnage / Recycling / Fuel Levy / rental) ──
+  { name: 'Revenue - Transport', amount: 31223, bucket: 'general' },
+  { name: 'General Waste Tonnage', amount: 15290.93, bucket: 'general' },
+  { name: 'Recycling Income', amount: 8220.46, bucket: 'general' },
+  { name: 'Revenue - Recycling M3 RATE TIPPING $50/M3', amount: 4150.88, bucket: 'general' },
+  { name: 'Fuel Levy', amount: 7468.45, bucket: 'general' },
+  { name: 'LONG TERM BIN RENTAL 1 MONTH', amount: 4832.79, bucket: 'general' },
+  // ── intentionally OTHER (genuinely non-bin revenue) ──
+  { name: 'Machinery Hire', amount: 4410, bucket: 'other' },
+  { name: 'Other fees', amount: 7576.72, bucket: 'other' },
+  { name: 'PLASTIC AND TAPE', amount: 1490, bucket: 'other' },
+  { name: 'Revenue - Council Permits', amount: 5034.02, bucket: 'other' },
+]
+
+const REAL_COS_YTD = [
+  // ── ASB- bin-coded tipping (incl. no-space variant 'ASB - 2M(327)') ──
+  { name: 'ASB - 1.1 (325)', amount: 165, bucket: 'disposal' },
+  { name: 'ASB - 10m (321)', amount: 20517.9, bucket: 'disposal' },
+  { name: 'ASB - 16m (322)', amount: 4987.16, bucket: 'disposal' },
+  { name: 'ASB - 23m (322)', amount: 5395.5, bucket: 'disposal' },
+  { name: 'ASB - 2M(327)', amount: 2512.86, bucket: 'disposal' },
+  { name: 'ASB - 4m (324)', amount: 23260.87, bucket: 'disposal' },
+  { name: 'ASB - 6m (326)', amount: 22673.76, bucket: 'disposal' },
+  { name: 'ASB - 8m (328)', amount: 33123.35, bucket: 'disposal' },
+  // ── C- (concrete) ──
+  { name: 'C - 6m (356)', amount: 580.7, bucket: 'disposal' },
+  // ── GW- (green waste) ──
+  { name: 'GW - 6m (336)', amount: 312.56, bucket: 'disposal' },
+  { name: 'GW - 8m (338)', amount: 346.35, bucket: 'disposal' },
+  // ── S- (soil) ──
+  { name: 'S - 4m (344)', amount: 1608.18, bucket: 'disposal' },
+  { name: 'S - 6m (346)', amount: 6249.57, bucket: 'disposal' },
+  { name: 'S - 8m (348)', amount: 14101.49, bucket: 'disposal' },
+  // ── W- (general waste), incl. GAP-018's 'W- 4m' no-space-before-dash variant ──
+  { name: 'W - 4m Heavy (305)', amount: 32424.2, bucket: 'disposal' },
+  { name: 'W - 6m Heavy (307)', amount: 38954.72, bucket: 'disposal' },
+  { name: 'W - 6m Light (306)', amount: 12831.28, bucket: 'disposal' },
+  { name: 'W - 8m Heavy (309)', amount: 13211.19, bucket: 'disposal' },
+  { name: 'W - 8m Light (308)', amount: 2440.6, bucket: 'disposal' },
+  { name: 'W - Bigm Heavy (311)', amount: 3051.69, bucket: 'disposal' },
+  { name: 'W - Bigm Light (310)', amount: 1236.42, bucket: 'disposal' },
+  { name: 'W- 4m Light (304)', amount: 14075.04, bucket: 'disposal' },
+  // ── WMF- ──
+  { name: 'WMF - 10m (312)', amount: 13245.33, bucket: 'disposal' },
+  { name: 'WMF - 12M (313)', amount: 45985.36, bucket: 'disposal' },
+  { name: 'WMF - 16m (314)', amount: 14331.46, bucket: 'disposal' },
+  { name: 'WMF - 23m (315)', amount: 7886.87, bucket: 'disposal' },
+  // ── keyword-matched tipping/recycling-cost rows ──
+  { name: 'Contaminated soil tipping costs', amount: 12841.7, bucket: 'disposal' },
+  { name: 'Recycling Costs - Concrete Tipping', amount: 222.82, bucket: 'disposal' },
+  { name: 'Recycling costs - General Waste', amount: 137652.75, bucket: 'disposal' },
+  { name: 'Recycling costs - Green Waste', amount: 12395.04, bucket: 'disposal' },
+  { name: 'Recycling Costs - Soil Tipping', amount: 8282.36, bucket: 'disposal' },
+  { name: 'Recycling Costs - Timber', amount: 1395.88, bucket: 'disposal' },
+  { name: 'Tipping by Bin - Asbestos (A)', amount: 2968.44, bucket: 'disposal' },
+  { name: 'Tipping by Bin - Green Waste (GW)', amount: 277.08, bucket: 'disposal' },
+  { name: 'Tipping by Bin - Soil (S)', amount: 1310, bucket: 'disposal' },
+  // ── intentionally OTHER (consumables + COGS catch-all) ──
+  { name: 'Cost of Goods Sold', amount: 388.92, bucket: 'other' },
+  { name: 'PLASTIC, TAPE AND BAGS FOR ASBESTOS', amount: 1994.03, bucket: 'other' },
+]
+
+const sumBucket = (table, bucket) =>
+  table.filter(r => r.bucket === bucket).reduce((s, r) => s + r.amount, 0)
+
+describe('classifyTradingIncomeRow — FULL real FY2026 chart of accounts (GAP-017 verification)', () => {
+  it.each(REAL_TRADING_INCOME_YTD.map(r => [r.name, r.bucket]))(
+    '%s → %s', (name, expected) => {
+      expect(classifyTradingIncomeRow(name)).toBe(expected)
+    }
+  )
+
+  it('only the 4 genuinely-ancillary rows classify as other', () => {
+    const others = REAL_TRADING_INCOME_YTD
+      .filter(r => classifyTradingIncomeRow(r.name) === 'other')
+      .map(r => r.name)
+      .sort()
+    expect(others).toEqual([
+      'Machinery Hire',
+      'Other fees',
+      'PLASTIC AND TAPE',
+      'Revenue - Council Permits',
+    ])
+  })
+
+  it('CONTAMINATED SOIL REVENUE does not false-match the CON- prefix (soil, not general)', () => {
+    expect(classifyTradingIncomeRow('CONTAMINATED SOIL REVENUE')).toBe('soil')
+  })
+})
+
+describe('classifyCOSRow — FULL real FY2026 COS chart of accounts (GAP-018 verification)', () => {
+  it.each(REAL_COS_YTD.map(r => [r.name, r.bucket]))(
+    '%s → %s', (name, expected) => {
+      expect(classifyCOSRow(name)).toBe(expected)
+    }
+  )
+
+  it('only consumables + COGS catch-all classify as other', () => {
+    const others = REAL_COS_YTD
+      .filter(r => classifyCOSRow(r.name) === 'other')
+      .map(r => r.name)
+      .sort()
+    expect(others).toEqual([
+      'Cost of Goods Sold',
+      'PLASTIC, TAPE AND BAGS FOR ASBESTOS',
+    ])
+  })
+
+  it("'W- 4m Light (304)' — no space before dash — still hits disposal (GAP-018 cited form)", () => {
+    expect(classifyCOSRow('W- 4m Light (304)')).toBe('disposal')
+  })
+})
+
+describe('mapPLToFinancials — full-year real-data aggregation (GAP-017 + GAP-018 dollar scale)', () => {
+  const sections = {
+    'trading income': {
+      _total: 0,
+      _rows: REAL_TRADING_INCOME_YTD.map(({ name, amount }) => ({ name, amount })),
+    },
+    'cost of sales': {
+      _total: 0,
+      _rows: REAL_COS_YTD.map(({ name, amount }) => ({ name, amount })),
+    },
+    'operating expenses': { _total: 0, _rows: [] },
+  }
+  const result = mapPLToFinancials(sections, '2026-06')
+
+  it('rev_general captures the full WMF/CON/ancillary stream (~$986k YTD, was rev_other pre-audit)', () => {
+    expect(result.rev_general).toBeCloseTo(sumBucket(REAL_TRADING_INCOME_YTD, 'general'), 2)
+    // GAP-017 scale assertion: this is the $1M-order revenue that the
+    // pre-audit classifier silently dumped into rev_other.
+    expect(result.rev_general).toBeGreaterThan(980000)
+  })
+
+  it('rev_asbestos / rev_soil / rev_green each match their hand-assigned row sets', () => {
+    expect(result.rev_asbestos).toBeCloseTo(sumBucket(REAL_TRADING_INCOME_YTD, 'asbestos'), 2)
+    expect(result.rev_soil).toBeCloseTo(sumBucket(REAL_TRADING_INCOME_YTD, 'soil'), 2)
+    expect(result.rev_green).toBeCloseTo(sumBucket(REAL_TRADING_INCOME_YTD, 'green'), 2)
+  })
+
+  it('rev_other holds ONLY the 4 ancillary rows ($18.5k, not $1M+)', () => {
+    expect(result.rev_other).toBeCloseTo(sumBucket(REAL_TRADING_INCOME_YTD, 'other'), 2)
+    expect(result.rev_other).toBeLessThan(20000)
+    expect(result._diagnostic.unclassified_trading_income.sort()).toEqual([
+      'Machinery Hire',
+      'Other fees',
+      'PLASTIC AND TAPE',
+      'Revenue - Council Permits',
+    ])
+  })
+
+  it('rev_total reconciles to the straight sum of every trading-income row', () => {
+    const allRows = REAL_TRADING_INCOME_YTD.reduce((s, r) => s + r.amount, 0)
+    expect(result.rev_total).toBeCloseTo(allRows, 2)
+  })
+
+  it('cos_disposal captures all 35 bin-coded + tipping rows (>$330k — the GAP-018 amount)', () => {
+    expect(result.cos_disposal).toBeCloseTo(sumBucket(REAL_COS_YTD, 'disposal'), 2)
+    // GAP-018 scale assertion: ~$337k of bin-coded tipping was cos_other pre-audit.
+    expect(result.cos_disposal).toBeGreaterThan(330000)
+  })
+
+  it('cos_other holds ONLY consumables + COGS (~$2.4k)', () => {
+    expect(result.cos_other).toBeCloseTo(388.92 + 1994.03, 2)
+  })
+
+  it('cos_total reconciles to the straight sum of every COS row', () => {
+    const allRows = REAL_COS_YTD.reduce((s, r) => s + r.amount, 0)
+    expect(result.cos_total).toBeCloseTo(allRows, 2)
+  })
+})
+
 // ── Sprint 17 #17E — basis flag flow-through (cash vs accrual) ──────────────
 //
 // Companion documents:

@@ -64,11 +64,57 @@ const FAKE_BS_REPORT = {
 // Empty AR — keeps debtor INSERT loop short
 const FAKE_AR_REPORT = { Reports: [{ Rows: [] }] }
 
+// WP-I (2026-06-10) — GAP-020 regression fixture. Two debtors with non-zero
+// ageing buckets, Xero AgedReceivablesByContact column order:
+// [name, current, <30d, 30-60d, 60-90d, older, total]
+const FAKE_AR_REPORT_WITH_DEBTORS = {
+  Reports: [{
+    Rows: [
+      {
+        RowType: 'Section',
+        Title: '',
+        Rows: [
+          {
+            RowType: 'Row',
+            Cells: [
+              { Value: 'ABC Constructions' },
+              { Value: '1000' },   // current
+              { Value: '500' },    // 30 days
+              { Value: '200' },    // 60 days
+              { Value: '100' },    // 90 days
+              { Value: '50' },     // older — the bucket the pre-audit Cells[1..5] parser dropped
+              { Value: '1850' },   // total
+            ],
+          },
+          {
+            RowType: 'Row',
+            Cells: [
+              { Value: 'Seaford Demolition' },
+              { Value: '0' }, { Value: '0' }, { Value: '0' }, { Value: '0' },
+              { Value: '4200' },   // entirely in Older
+              { Value: '4200' },
+            ],
+          },
+          {
+            RowType: 'Row',
+            Cells: [
+              { Value: 'Total' },
+              { Value: '1000' }, { Value: '500' }, { Value: '200' }, { Value: '100' },
+              { Value: '4250' }, { Value: '6050' },
+            ],
+          },
+        ],
+      },
+    ],
+  }],
+}
+
 /**
  * Build a fetch mock that routes by URL substring. Returns the spy so tests
  * can inspect every call site (URL + method + body).
+ * @param {object} arReport - Xero AR response payload (default: empty report).
  */
-function installFetchMock() {
+function installFetchMock(arReport = FAKE_AR_REPORT) {
   const calls = []
   const mock = vi.fn(async (url, init = {}) => {
     calls.push({ url: String(url), method: init.method || 'GET', body: init.body, headers: init.headers })
@@ -84,7 +130,7 @@ function installFetchMock() {
     }
     // Xero Aged Receivables
     if (u.includes('/Reports/AgedReceivablesByContact')) {
-      return new Response(JSON.stringify(FAKE_AR_REPORT), { status: 200 })
+      return new Response(JSON.stringify(arReport), { status: 200 })
     }
     // Supabase monthly_reports SELECT (get-or-create) — return empty so it falls through
     if (u.includes('/rest/v1/monthly_reports') && (init.method === undefined || init.method === 'GET')) {
@@ -218,6 +264,83 @@ describe('syncMonth — writes accounting_basis on every row', () => {
     const summary = await syncMonth('2026-01', 'access', 'tenant', 'service', 'user-1', 'accrual')
     expect(summary.basis).toBe('accrual')
     expect(summary.month).toBe('2026-01')
+    expect(typeof summary.revenue).toBe('number')
+  })
+})
+
+// ── syncMonth AR ingestion (WP-I 2026-06-10 — GAP-020 regression) ───────────
+//
+// GAP-020 claimed AR sync was still disabled via `void arData;` and that the
+// ageing buckets were column-shifted (Cells[1..5], dropping Older). Both were
+// fixed in commits 9039b1b ("re-enable AR sync") and f5fa527 (mapper rewrite,
+// Cells[1..6]). These tests pin the live wire-level contract so the fix can
+// never silently regress: per-debtor rows MUST be written to debtors_monthly
+// with the Older bucket folded into overdue_90plus.
+
+describe('syncMonth — AR ingestion writes per-debtor rows (GAP-020)', () => {
+  it('writes one debtors_monthly INSERT per debtor (AR sync is ENABLED)', async () => {
+    const { calls } = installFetchMock(FAKE_AR_REPORT_WITH_DEBTORS)
+    const summary = await syncMonth('2026-01', 'access', 'tenant', 'service', 'user-1', 'cash')
+
+    const debtorInserts = calls.filter(c =>
+      c.url.includes('/rest/v1/debtors_monthly') && c.method === 'POST'
+    )
+    expect(debtorInserts.length).toBe(2) // 'Total' row must be skipped
+    expect(summary.debtorsWritten).toBe(2)
+  })
+
+  it('captures the Older bucket into overdue_90plus (pre-audit Cells[1..5] dropped it)', async () => {
+    const { calls } = installFetchMock(FAKE_AR_REPORT_WITH_DEBTORS)
+    await syncMonth('2026-01', 'access', 'tenant', 'service', 'user-1', 'cash')
+
+    const bodies = calls
+      .filter(c => c.url.includes('/rest/v1/debtors_monthly') && c.method === 'POST')
+      .map(c => JSON.parse(c.body))
+
+    const abc = bodies.find(b => b.debtor_name === 'ABC Constructions')
+    expect(abc).toBeDefined()
+    expect(abc.current_amount).toBe(1000)
+    expect(abc.overdue_30).toBe(500)
+    expect(abc.overdue_60).toBe(200)
+    // schema folds 90d + older into one column: 100 + 50
+    expect(abc.overdue_90plus).toBe(150)
+    expect(abc.total_outstanding).toBe(1850)
+
+    // A debtor whose entire balance sits in Older must not vanish (the exact
+    // failure mode of the old column-shifted parser).
+    const seaford = bodies.find(b => b.debtor_name === 'Seaford Demolition')
+    expect(seaford).toBeDefined()
+    expect(seaford.overdue_90plus).toBe(4200)
+    expect(seaford.total_outstanding).toBe(4200)
+  })
+
+  it('stamps report_month + accounting_basis on every debtor row and scopes the DELETE', async () => {
+    const { calls } = installFetchMock(FAKE_AR_REPORT_WITH_DEBTORS)
+    await syncMonth('2026-01', 'access', 'tenant', 'service', 'user-1', 'accrual')
+
+    const debtorDelete = calls.find(c =>
+      c.url.includes('/rest/v1/debtors_monthly') && c.method === 'DELETE'
+    )
+    expect(debtorDelete).toBeDefined()
+    expect(debtorDelete.url).toContain('report_month=eq.2026-01-01')
+    expect(debtorDelete.url).toContain('accounting_basis=eq.accrual')
+
+    const bodies = calls
+      .filter(c => c.url.includes('/rest/v1/debtors_monthly') && c.method === 'POST')
+      .map(c => JSON.parse(c.body))
+    for (const b of bodies) {
+      expect(b.report_month).toBe('2026-01-01')
+      expect(b.accounting_basis).toBe('accrual')
+    }
+  })
+
+  it('empty AR report → no debtors_monthly writes, sync still succeeds (non-fatal AR path)', async () => {
+    const { calls } = installFetchMock(FAKE_AR_REPORT)
+    const summary = await syncMonth('2026-01', 'access', 'tenant', 'service', 'user-1', 'cash')
+
+    const debtorCalls = calls.filter(c => c.url.includes('/rest/v1/debtors_monthly'))
+    expect(debtorCalls.length).toBe(0)
+    expect(summary.debtorsWritten).toBe(0)
     expect(typeof summary.revenue).toBe('number')
   })
 })
