@@ -18,7 +18,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Node 24 → npm 11, matching the npm that generates package-lock.json
+          # locally. npm 10 (Node 20) resolves vite 8's optional-peer esbuild
+          # differently and rejects the lock with EUSAGE "Missing: esbuild".
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
@@ -55,7 +58,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Node 24 → npm 11, matching the npm that generates package-lock.json
+          # locally. npm 10 (Node 20) resolves vite 8's optional-peer esbuild
+          # differently and rejects the lock with EUSAGE "Missing: esbuild".
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
