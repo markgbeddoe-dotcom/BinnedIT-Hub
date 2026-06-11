@@ -4,6 +4,25 @@ import * as D from '../data/financials';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
+// Markdown-lite renderer — the assistant replies with **bold** and `code`
+// spans; render those (plus newlines via pre-wrap) without a markdown dep.
+function renderChatText(text) {
+  if (!text) return text;
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+      return (
+        <code key={i} style={{ background: 'rgba(0,0,0,0.08)', borderRadius: 3, padding: '0 4px', fontSize: 12 }}>
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return part;
+  });
+}
+
 const SUGGESTED_QUESTIONS = [
   "How do I schedule a new service?",
   "How do I add a driver to a job?",
@@ -210,7 +229,7 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
                 )}
                 {(m.text || m.role === 'user' || (m.activity || []).length === 0) && (
                   <div style={{ background: m.role === 'user' ? B.yellow : B.bg, color: m.role === 'user' ? '#fff' : B.textPrimary, borderRadius: 12, padding: '10px 14px', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                    {m.text || (m.role === 'assistant' && chatLoading ? '...' : '')}
+                    {m.text ? renderChatText(m.text) : (m.role === 'assistant' && chatLoading ? '...' : '')}
                   </div>
                 )}
               </div>
