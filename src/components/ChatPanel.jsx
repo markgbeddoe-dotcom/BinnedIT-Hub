@@ -123,8 +123,11 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
             if (data === '[DONE]') continue;
             try {
               const parsed = JSON.parse(data);
-              if (typeof parsed.text === 'string' && parsed.text) {
-                accumulatedText += parsed.text;
+              // Contract is {text: "..."} — but tolerate a bare JSON string
+              // delta too, so a server-side shape regression degrades gracefully.
+              const textDelta = typeof parsed === 'string' ? parsed : parsed?.text;
+              if (typeof textDelta === 'string' && textDelta) {
+                accumulatedText += textDelta;
                 pushUpdate();
               }
               if (parsed.tool && parsed.tool.name) {

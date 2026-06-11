@@ -460,7 +460,10 @@ FINANCIAL DATA FOR ${reportMonth}:
   // --- Agent loop (tool use), pumped after the response is returned ---
   ;(async () => {
     try {
-      let turn = await consumeAnthropicTurn(firstRes, send)
+      // onText receives the raw delta string — wrap it in the {text} SSE shape
+      // (passing `send` directly would emit bare JSON strings the client drops).
+      const sendText = (t) => send({ text: t })
+      let turn = await consumeAnthropicTurn(firstRes, sendText)
       let iterations = 1
 
       while (turn.stopReason === 'tool_use') {
@@ -500,7 +503,7 @@ FINANCIAL DATA FOR ${reportMonth}:
 
         iterations += 1
         const nextRes = await startAnthropicTurn(ANTHROPIC_API_KEY, { ...basePayload, messages: convo })
-        turn = await consumeAnthropicTurn(nextRes, send)
+        turn = await consumeAnthropicTurn(nextRes, sendText)
       }
 
       await sendDone()
