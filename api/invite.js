@@ -2,7 +2,9 @@
 // Uses SUPABASE_SERVICE_ROLE_KEY (server-side only, never exposed to browser)
 //
 // DOMAIN RESTRICTION: Invitations (which trigger a magic-link email) may only
-// be sent to @binnedit.com.au addresses. All other recipients are rejected.
+// be sent to company domains — binnedit.com.au and binned-it.com.au (both are
+// Mark's; the hyphenated domain hosts mail aliases without extra M365 seats).
+// Override/extend via INVITE_ALLOWED_DOMAINS (comma-separated, no @).
 // This restriction is in place until further notice from the project owner.
 
 /**
@@ -27,10 +29,14 @@
 export const config = { runtime: 'edge' };
 
 const SUPABASE_URL = 'https://dkjwyzjzdcgrepbgiuei.supabase.co';
-const ALLOWED_DOMAIN = 'binnedit.com.au';
+const ALLOWED_DOMAINS = (process.env.INVITE_ALLOWED_DOMAINS || 'binnedit.com.au,binned-it.com.au')
+  .split(',').map((d) => d.trim().toLowerCase()).filter(Boolean);
+const ALLOWED_DOMAIN = ALLOWED_DOMAINS.join(', '); // used in error copy
 
 function isAllowedDomain(email) {
-  return typeof email === 'string' && email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`)
+  if (typeof email !== 'string') return false;
+  const lower = email.toLowerCase();
+  return ALLOWED_DOMAINS.some((d) => lower.endsWith(`@${d}`));
 }
 
 export default async function handler(req) {
