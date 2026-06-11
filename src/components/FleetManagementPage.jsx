@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react'
 import { B, fontHead, fontBody, fmtFull } from '../theme'
 import { useFleetAssets, useUpcomingMaintenance, useAddMaintenanceRecord } from '../hooks/useFleet'
 import { useBreakpoint } from '../hooks/useBreakpoint'
+import ChecklistHazardReview from './ChecklistHazardReview'
 
 // ── Fallback data ──────────────────────────────────────────────────────────────
 const FALLBACK_VEHICLES = [
@@ -221,6 +222,7 @@ export default function FleetManagementPage() {
           { id:'vehicles', label:'Vehicles' },
           { id:'bins', label:'Bin Inventory' },
           { id:'maintenance', label:'Maintenance Log' },
+          { id:'compliance', label:'Driver Compliance' },
         ].map(t => (
           <button key={t.id} onClick={()=>setActiveTab(t.id)} style={{
             background:'transparent', border:'none', padding:'8px 18px', cursor:'pointer',
@@ -357,6 +359,9 @@ export default function FleetManagementPage() {
           </div>
         </div>
       )}
+
+      {/* ── DRIVER COMPLIANCE TAB (GAP-050) — checklist + hazard review ── */}
+      {activeTab === 'compliance' && <ChecklistHazardReview />}
 
       {showLogMaint && (
         <LogMaintenanceModal
