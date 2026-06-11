@@ -9,9 +9,21 @@
  * - user: session.user (null if not logged in)
  * - profile: profiles table row (id, role, full_name, email)
  * - loading: true while session is being initialised
+ * - role: profile.role string (null until profile loads)
+ *
+ * Role booleans. Convention: isOwner / isDriver / isViewer identify the
+ * persona exactly; the capability booleans (isManager, isBookkeeper,
+ * isFleetManager, canWrite) include the roles above them in the hierarchy
+ * (owner can do everything a manager can, etc.):
  * - isOwner: boolean — role === 'owner'
- * - isManager: boolean — role in ['owner', 'manager']
+ * - isManager: boolean — role in ['owner', 'manager', 'fleet_manager']
+ * - isBookkeeper: boolean — role in ['owner', 'bookkeeper']
+ * - isFleetManager: boolean — role in ['owner', 'manager', 'fleet_manager']
+ * - isDriver: boolean — role === 'driver' (exact — office staff are NOT drivers)
+ * - isViewer: boolean — role in ['viewer', 'investor'] ('investor' is a
+ *   defensive alias kept in sync with the sandbox check in src/main.jsx)
  * - canWrite: boolean — role in ['owner', 'bookkeeper']
+ *
  * - signIn(email, password): async, returns { error }
  * - signOut(): async
  */
@@ -62,6 +74,8 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut()
   }
 
+  const role = profile?.role ?? null
+
   const value = {
     session,
     user: session?.user ?? null,
@@ -69,10 +83,14 @@ export function AuthProvider({ children }) {
     loading,
     signIn,
     signOut,
-    isOwner: profile?.role === 'owner',
-    isManager: ['owner', 'manager', 'fleet_manager'].includes(profile?.role),
-    isBookkeeper: ['owner', 'bookkeeper'].includes(profile?.role),
-    canWrite: ['owner', 'bookkeeper'].includes(profile?.role),
+    role,
+    isOwner: role === 'owner',
+    isManager: ['owner', 'manager', 'fleet_manager'].includes(role),
+    isBookkeeper: ['owner', 'bookkeeper'].includes(role),
+    isFleetManager: ['owner', 'manager', 'fleet_manager'].includes(role),
+    isDriver: role === 'driver',
+    isViewer: role === 'viewer' || role === 'investor',
+    canWrite: ['owner', 'bookkeeper'].includes(role),
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
