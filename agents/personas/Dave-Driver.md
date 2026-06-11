@@ -20,6 +20,15 @@
 - Coordinates: `Number(null) === 0` — any new coord consumer must null-check or drivers navigate to the Atlantic (fixed once in NavigateButton/tipDecision; watch for recurrences).
 
 ## Learnings Log
+### 2026-06-12 — first full driver day on production (J4 ✅)
+- Test login created: `mark@binned-it.com.au` / `DriverTest2026x` (Mark's alias domain; profile "Test Driver (Mark)", role driver). Reuse this account.
+- THREE never-could-have-worked P0s found in one run, all "UI exists, DB says no":
+  1. `vehicle_checklists.passed` did not exist on live (the plan ASSERTED it did; nobody verified) → gate permanently locked. Fixed: migration 029 generated column.
+  2. `bookings_status_check` lacked en_route/arrived → every Depart click 400-ed. Fixed: migration 030.
+  3. `job-photos` bucket had NO storage policies → all photo uploads violated RLS → completion gate unsatisfiable. Fixed: migration 031.
+- *Next-run change (systemic):* for every gate/transition the UI promises, verify the DB object it depends on EXISTS on live (column, constraint value, bucket policy) — schema-vs-code contract check before trusting any green build. Unit tests with mocked supabase prove nothing about this class.
+- Console noise found en route: staff_certificates + insurance_policies queries 400 on the driver session (likely missing tables/columns or RLS) — Jake's domain, untriaged.
+
 ### 2026-06-11
 - Checklist gate verified live (lock screen, no leakage). Full day-chain unproven — blocked on a real driver account (J1) and an assigned job (J3).
 - The Number(null)→(0,0) class of bug was caught in adversarial review before migration 023 made it live. *Next-run change:* whenever bookings gain geocoded rows, this persona re-tests Navigate on an un-geocoded booking specifically.

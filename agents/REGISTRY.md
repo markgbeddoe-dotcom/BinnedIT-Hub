@@ -41,10 +41,10 @@ P0 journeys. Updated by the Product Lead every session. ✅ pass (date) · ❌ f
 
 | # | Journey | Persona | Status |
 |---|---|---|---|
-| J1 | Invite a new user with role *driver* → they can sign in | Mark | ⬜ invite UI fixed + deployed 2026-06-11; end-to-end signup unproven |
+| J1 | Invite a new user with role *driver* → they can sign in | Mark | ✅ 2026-06-12 — invited mark@binned-it.com.au as driver via UI (after domain-allowlist fix), profile role=driver, driver signed in to /driver |
 | J2 | Edit a team member's role/details in Team tab and it persists | Mark | ✅ 2026-06-11 — root cause was profiles UPDATE RLS (self-row only); migration 028 fixed; proven live (Andrew viewer→investor persisted through reload) |
-| J3 | Create job → assign driver/truck/date → job born/moves to Scheduled | Tracey | ⬜ panel renders (QA 2026-06-11); real assignment blocked on J1 (no drivers exist) |
-| J4 | Driver day: login → checklist gate → depart/arrive/start/complete with photos | Dave | ⬜ gate verified 2026-06-11; full chain blocked on J1/J3 |
+| J3 | Create job → assign driver/truck/date → job born/moves to Scheduled | Tracey | ✅ 2026-06-12 — assigned live job to Test Driver (Mark) via panel; pending→scheduled rule fired; driver saw it |
+| J4 | Driver day: login → checklist gate → depart/arrive/start/complete with photos | Dave | ✅ 2026-06-12 — FULL chain live, after fixing 3 never-worked P0s: missing vehicle_checklists.passed (029), bookings CHECK lacked en_route/arrived (030), job-photos bucket had no storage policies (031) |
 | J5 | Tip-or-Return decision after pickup records a load | Dave | ⬜ engine unit-tested; live blocked on J4 |
 | J6 | Invoice → reminder → collections letter chain | Sarah | ⬜ read views verified earlier sprints; not re-proven on current deploy |
 | J7 | Waste audit photo → AI verdict → approve adjustment → Sarah actions manually | Jake/Sarah | ⬜ panel empty-state verified 2026-06-11; full chain needs a real photo |
@@ -53,7 +53,7 @@ P0 journeys. Updated by the Product Lead every session. ✅ pass (date) · ❌ f
 | J10 | AI chat: "how do I…" answer + live tool action with visible audit chips | Mark | ✅ 2026-06-11 verified on live deploy (after SSE fix) |
 | J11 | Public booking → confirmation SMS/email → appears in CRM/dispatch | Customer→Tracey | ⬜ verified in earlier sprint; not re-proven on current deploy |
 
-**Pass-rate: 3/11 proven on current deploy** (J2 added 2026-06-11). That number is the honest baseline Mark called "~25% effective". It rises only via persona-run proof.
+**Pass-rate: 6/11 proven on current deploy** (J1/J3/J4 added 2026-06-12 — first ever end-to-end run of the core operational loop on production). That number is the honest baseline Mark called "~25% effective". It rises only via persona-run proof.
 
 ## Update protocol (per session)
 

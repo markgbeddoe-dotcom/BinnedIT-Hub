@@ -75,6 +75,12 @@ Rule of thumb (industry-standard): these 6 cover ~95% of real usage. A change is
 
 ## 8 — Decision & Learnings Log
 
+### 2026-06-12 — first full persona run of the core loop (J1+J3+J4 ✅, 3/11 → 6/11)
+- The Dave-Driver persona's FIRST production run found three never-could-have-worked P0s in 30 minutes (missing `passed` column, status CHECK missing en_route/arrived, zero storage policies on job-photos) plus the invite domain block on Mark's alias domain. Weeks of unit tests, builds, and owner-persona demos never touched them. **This validates Mark's "25% effective" assessment mechanically: the UI layer was real, the DB contract beneath it was unverified.**
+- *Standing gate adopted:* any feature whose flow crosses a DB gate (column, constraint value, RLS policy, bucket policy) requires a live schema-contract check as that persona before "done". Mocked-supabase tests are explicitly insufficient evidence.
+- *Pattern:* every blocker today returned 400/403 in the browser console — persona runs must always end with a console-error sweep (the staff_certificates/insurance_policies 400s found today are Jake's next triage).
+- Test driver account exists for future runs: see Dave-Driver.md log.
+
 ### 2026-06-11 — System inception (session: chatbot + settings + QA)
 - **Failure diagnosed:** all live QA ran as the owner persona only; the invite-roles gap (4 of 7 roles) shipped and was caught by Mark, not us. *Change:* persona suite (§5) now gates "done".
 - **Failure diagnosed:** chat answered with tool chips but no text in production — SSE contract violation (`onText` passed raw `send`). Local tests and raw curl both looked fine; only the real UI failed. *Change:* live-UI verification is part of every feature's definition of done.

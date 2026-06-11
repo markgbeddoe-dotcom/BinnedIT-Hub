@@ -55,3 +55,15 @@ Sourced from the `_skipsync_migrations` audit table at apply time.
 - sha256: `b94d3753411fa7d676cdb146dbf4ff145d94e6b68140659ff9add4ea6549a549`
 - duration: 1172 ms
 
+## 2026-06-11T22:20:45.025Z — 029_vehicle_checklists_passed.sql
+- sha256: `57eec6dab96a862f47978fef5f6a6af039cf7e86a21fd7150d6ae0fff1671a51`
+- duration: 1240 ms
+
+## 2026-06-11T22:24:02.754Z — 030_bookings_status_enroute.sql
+- sha256: `bc09977f5212e39c4cf1a6479ca9aa0cd2a955798ceb829ad6d6610c90fc246c`
+- duration: 1035 ms
+
+## 2026-06-11T22:27:49.385Z — 031_job_photos_storage_policies.sql
+- sha256: `74e7b993b2c206347975eafe2073b110673ad3c53fb85640d665a15eb0c42e81`
+- duration: 1247 ms
+
