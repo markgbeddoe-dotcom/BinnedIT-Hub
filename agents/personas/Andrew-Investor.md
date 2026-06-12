@@ -17,6 +17,11 @@
 - The chat endpoint role-gates tools server-side (viewer → read tools only, no assign_job) — verify server-side, not just hidden UI.
 
 ## Learnings Log
+### 2026-06-12 — J9 PROVEN (the attack found a real hole)
+- The URL-hack sweep passed at the UI layer, but the **API-level write test found the real vulnerability**: an investor JWT could PATCH bookings and read customer PII directly via PostgREST — the RequireRole guard was client-only theatre. This is exactly why negative/attacker testing is a first-class journey. Migration 032 locked the RLS; re-verified live: investor PATCH booking → 0 rows, customer read → 0 rows. J9 ✅.
+- *Standing method:* for every access requirement, test the WRITE/READ with a real low-privilege JWT against PostgREST, not just the hidden UI. The UI guard and the RLS policy must BOTH hold.
+- Test account: andrew-test@binned-it.com.au / PersonaTest2026x (role investor) — reuse; never touch the real Andrew.
+
 ### 2026-06-11
 - RequireRole guard shipped and wraps /rules + /waste-audits; the rest of the route map has NOT been swept as Andrew on the live deploy. J9 stays unproven until the full paste-the-URL sweep runs with his session.
 - Principle adopted: every persona proves what they CAN do; Andrew proves what everyone else CAN'T. Negative testing is a first-class journey, not an afterthought.

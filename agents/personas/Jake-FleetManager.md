@@ -23,3 +23,10 @@
 - ChecklistHazardReview was built by the overnight swarm but never mounted anywhere — found orphaned days later and wired into Fleet as the Driver Compliance tab. *Next-run change:* after any multi-agent build, grep new components for zero-reference orphans before calling the build complete.
 - The fleet_manager-vs-RLS mismatch on hazard resolution is a standing suspect for "button does nothing" reports from Jake. Untriaged; candidate migration: extend policy to fleet_manager (= current_user_role() IN ('owner','manager') is too narrow given AuthContext treats fleet_manager as manager-equivalent).
 - Rules engine verified live (10 seeded rules, editors, history) but "edited value changes behaviour" remains unproven — proving it requires a tip-decision run after an edit.
+
+### 2026-06-12 — assessment findings fixed
+- **Rules Engine was double-blocked for me:** route admitted fleet_manager but the page's content gate (`role==='owner'||'manager'`) rejected it AND business_rules RLS excluded fleet_manager. Both fixed (content gate + migration 032). Verified live: I reach Rules and can PATCH a rule (200, 1 row).
+- **fleet_assets was empty** → migration 033 seeded SS-01/02/03 (PLACEHOLDER — Mark to replace with real fleet) so truck assignment works.
+- **staff_certificates/insurance_policies 400s root-caused:** UI filtered `is_active` which didn't exist + both tables had zero RLS policies. Migration 032 added the columns + office policies. Verified: both read 200, no more 400.
+- Test account: jake-test@binned-it.com.au / PersonaTest2026x (fleet_manager).
+- Still carried: hazard_reports had a leftover permissive UPDATE (dropped in 032 — now office-only); checklist truck_id still free-text (validate against the new fleet roster in a later session).

@@ -49,11 +49,15 @@ P0 journeys. Updated by the Product Lead every session. ✅ pass (date) · ❌ f
 | J6 | Invoice → reminder → collections letter chain | Sarah | ⬜ read views verified earlier sprints; not re-proven on current deploy |
 | J7 | Waste audit photo → AI verdict → approve adjustment → Sarah actions manually | Jake/Sarah | ⬜ panel empty-state verified 2026-06-11; full chain needs a real photo |
 | J8 | Month-end: Xero sync → dashboards reconcile (Meg sign-off) | Meg | ✅ 2026-05-08 live recon tied to Xero; re-run after next sync |
-| J9 | Investor opens /investor: cash-only, no operational access via URL-hacking | Andrew | ⬜ RequireRole shipped 2026-06-11; not journey-tested |
+| J9 | Investor opens /investor: cash-only, no operational access via URL-hacking | Andrew | ✅ 2026-06-12 — assessment found investor JWT could WRITE bookings + READ PII at the DB layer (route guard alone was insufficient); migration 032 closed it, verified live: investor PATCH booking + customer read both denied (0 rows) |
 | J10 | AI chat: "how do I…" answer + live tool action with visible audit chips | Mark | ✅ 2026-06-11 verified on live deploy (after SSE fix) |
 | J11 | Public booking → confirmation SMS/email → appears in CRM/dispatch | Customer→Tracey | ⬜ verified in earlier sprint; not re-proven on current deploy |
 
-**Pass-rate: 6/11 proven on current deploy** (J1/J3/J4 added 2026-06-12 — first ever end-to-end run of the core operational loop on production). That number is the honest baseline Mark called "~25% effective". It rises only via persona-run proof.
+**Pass-rate: 7/11 proven on current deploy** (J9 added 2026-06-12 via full-system assessment + security lockdown). J2 hardened (route guards + DB self-escalation block). Remaining unproven: J5 tip-or-return, J6 collections chain, J7 waste-audit chain, J11 public booking — all need a live data-bearing run.
+
+## Assessment 2026-06-12 (7-agent fleet) — see _bmad-output/assessment-2026-06-12/triage.md
+Fixed & deployed this session: migration 032 (RLS lockdown — investor/viewer write+PII-read denied, fleet_manager added to office policies, notifications/audit_log/certs/insurance get real policies), 033 (seed fleet_assets — trucks SS-01/02/03), route guards on /settings*, Rules Engine fleet_manager content gate, Collections fake-debtor honesty, notification writer payload fixes. Mobile: PWA install-ready + TWA APK recipe in android-apk/.
+Carried to next sessions (triage.md Wave 3): notify-booking not wired to status change, no cancel-booking UI, cash/accrual toggle cosmetic (no accrual data), dashboard 5/12 tabs show demo data (banner deferred), R7 efficiency UI unreachable, bin_types empty, Compare==Prices, About stale metadata. Process: make the DB-contract sweep a recurring gate. That number is the honest baseline Mark called "~25% effective". It rises only via persona-run proof.
 
 ## Update protocol (per session)
 
