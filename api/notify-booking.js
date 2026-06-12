@@ -270,8 +270,11 @@ async function sendSms(booking, messages) {
 }
 
 /**
- * Best-effort log into public.notifications (migration 010). type CHECK only
- * allows a fixed set — 'general' is the safe bucket. Never blocks the send.
+ * Best-effort log into public.notifications. Live columns are
+ * (user_id, type, title, message, read/is_read, link) and the type CHECK
+ * allows booking|job|invoice|compliance|hazard|system — so we use 'booking'
+ * and the real 'message'/'link' columns (the old 'general'/'body'/'related_*'
+ * payload 400-ed every time). Never blocks the send.
  */
 async function logNotification(serviceKey, { booking, newStatus, email, sms }) {
   if (!serviceKey) return false
@@ -285,11 +288,10 @@ async function logNotification(serviceKey, { booking, newStatus, email, sms }) {
         Prefer: 'return=minimal',
       },
       body: JSON.stringify({
-        type: 'general',
+        type: 'booking',
         title: `Customer notified: booking ${String(booking.id).slice(0, 8).toUpperCase()} → ${newStatus}`,
-        body: `email: ${email.sent ? 'sent' : email.reason} | sms: ${sms.sent ? 'sent' : sms.reason} | to: ${booking.customer_email || '-'} / ${booking.customer_phone || '-'}`,
-        related_id: booking.id,
-        related_table: 'bookings',
+        message: `email: ${email.sent ? 'sent' : email.reason} | sms: ${sms.sent ? 'sent' : sms.reason} | to: ${booking.customer_email || '-'} / ${booking.customer_phone || '-'}`,
+        link: `/dispatch`,
       }),
     })
     return res.ok

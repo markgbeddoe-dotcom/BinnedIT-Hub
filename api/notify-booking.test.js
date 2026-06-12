@@ -238,12 +238,13 @@ describe('api/notify-booking', () => {
     expect(params.get('From')).toBe('+61400000000')
     expect(params.get('Body')).toContain('12 Jun 2026')
 
-    // Log row → public.notifications
+    // Log row → public.notifications (live contract: type in the CHECK set,
+    // real `message`/`link` columns — assessment DEAD-2 fix)
     expect(logPayload).toMatchObject({
-      type: 'general',
-      related_table: 'bookings',
-      related_id: BOOKING_ID,
+      type: 'booking',
+      link: '/dispatch',
     })
+    expect(logPayload.message).toBeTruthy()
     expect(logPayload.title).toContain('confirmed')
   })
 

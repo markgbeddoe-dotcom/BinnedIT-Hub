@@ -46,7 +46,10 @@ export async function dismissNotification(notificationId) {
   if (error) throw error
 }
 
-export async function createNotification({ type, title, body, relatedId, relatedTable, userId } = {}) {
+// Live columns: (user_id, type, title, message, read/is_read, link).
+// type CHECK allows booking|job|invoice|compliance|hazard|system — NOT
+// 'general'. `body`/`related_*` do not exist (assessment DEAD-2).
+export async function createNotification({ type, title, message, link, userId } = {}) {
   const targetId = userId || (await supabase.auth.getUser()).data?.user?.id
   if (!targetId) return
 
@@ -54,11 +57,10 @@ export async function createNotification({ type, title, body, relatedId, related
     .from('notifications')
     .insert({
       user_id: targetId,
-      type: type || 'general',
+      type: type || 'system',
       title,
-      body: body || null,
-      related_id: relatedId || null,
-      related_table: relatedTable || null,
+      message: message || null,
+      link: link || null,
     })
 
   if (error) throw error

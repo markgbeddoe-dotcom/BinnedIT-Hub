@@ -71,3 +71,7 @@ Sourced from the `_skipsync_migrations` audit table at apply time.
 - sha256: `9cd697eb0cbbe868488fd90ed866788426244582897e9a6e524afd8e2f94d037`
 - duration: 1148 ms
 
+## 2026-06-12T08:14:48.972Z — 033_seed_fleet_assets.sql
+- sha256: `6815071a9598286b926e4fea67afb5f3488d1a720699ffe3bdb2994e575924c0`
+- duration: 1042 ms
+
