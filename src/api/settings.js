@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase'
 
-export async function inviteUser(email, role) {
+export async function inviteUser(email, role, fullName) {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) throw new Error('Not authenticated')
 
@@ -10,7 +10,7 @@ export async function inviteUser(email, role) {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ email, role }),
+    body: JSON.stringify({ email, role, fullName }),
   })
 
   if (!res.ok) {
@@ -19,6 +19,27 @@ export async function inviteUser(email, role) {
   }
   const data = await res.json()
   return data
+}
+
+/** Remove a team member (owner only). Deletes the auth user + profile. */
+export async function removeUser(userId) {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('Not authenticated')
+
+  const res = await fetch('/api/remove-user', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ userId }),
+  })
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || `Remove failed (${res.status})`)
+  }
+  return res.json()
 }
 
 export async function getAlertThresholds() {

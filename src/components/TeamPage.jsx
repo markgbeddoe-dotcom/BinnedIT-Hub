@@ -7,6 +7,7 @@ import {
   getTeamMembers, updateTeamMember,
   getTeamRecentActivity,
 } from '../api/team'
+import { inviteUser, removeUser } from '../api/settings'
 import { useAuth } from '../context/AuthContext'
 import { useBreakpoint } from '../hooks/useBreakpoint'
 // GAP-048: certificates + insurance policies CRUD + 30/7-day expiry warnings
@@ -29,13 +30,19 @@ const ROLE_COLORS = {
 export default function TeamPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { isOwner, isManager } = useAuth()
+  const { isOwner, isManager, user } = useAuth()
   const { isMobile } = useBreakpoint()
   const canEdit = isOwner || isManager
+  // Add/remove create or delete accounts — owner-only (matches the invite +
+  // remove-user endpoints, which both verify role === 'owner' server-side).
+  const canManageMembers = isOwner
 
   const [editingMember, setEditingMember] = useState(null)
   const [editForm, setEditForm]           = useState({})
   const [selectedUser, setSelectedUser]   = useState(null)
+  const [showAdd, setShowAdd]             = useState(false)
+  const [addForm, setAddForm]             = useState({ full_name: '', email: '', role: 'driver' })
+  const [addMsg, setAddMsg]               = useState(null)
 
   const iStyle = {
     background: B.bg, border: `1px solid ${B.cardBorder}`, borderRadius: 6,
@@ -65,7 +72,34 @@ export default function TeamPage() {
       setEditForm({})
     },
   })
+  const addMut = useMutation({
+    mutationFn: ({ email, role, fullName }) => inviteUser(email, role, fullName),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['team-members'] })
+      setAddMsg({ ok: true, text: `Invite sent to ${vars.email} as ${vars.role}.` })
+      setAddForm({ full_name: '', email: '', role: 'driver' })
+    },
+    onError: (e) => setAddMsg({ ok: false, text: e.message || 'Invite failed' }),
+  })
+  const removeMut = useMutation({
+    mutationFn: (id) => removeUser(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['team-members'] }),
+    onError: (e) => window.alert(e.message || 'Remove failed'),
+  })
+
   // ── Helpers ────────────────────────────────────────────────
+  const submitAdd = () => {
+    const email = addForm.email.trim()
+    if (!email) { setAddMsg({ ok: false, text: 'Email is required' }); return }
+    setAddMsg(null)
+    addMut.mutate({ email, role: addForm.role, fullName: addForm.full_name.trim() })
+  }
+  const removeMember = (m) => {
+    if (m.id === user?.id) { window.alert("You can't remove your own account."); return }
+    if (window.confirm(`Remove ${m.full_name || 'this member'}? This deletes their login and access. This cannot be undone.`)) {
+      removeMut.mutate(m.id)
+    }
+  }
   const startEdit = (m) => {
     setEditingMember(m.id)
     setEditForm({ full_name: m.full_name || '', phone: m.phone || '', role: m.role })
@@ -92,9 +126,62 @@ export default function TeamPage() {
 
       {/* ── Team Members ── */}
       <div style={{ background: B.cardBg, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
-        <div style={{ fontFamily: fontHead, fontSize: 14, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase', marginBottom: 16 }}>
-          Team Members {!membersLoading && `(${members.length})`}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          <div style={{ fontFamily: fontHead, fontSize: 14, fontWeight: 700, color: B.textPrimary, textTransform: 'uppercase' }}>
+            Team Members {!membersLoading && `(${members.length})`}
+          </div>
+          {canManageMembers && (
+            <button
+              onClick={() => { setShowAdd(s => !s); setAddMsg(null) }}
+              style={{ background: showAdd ? 'none' : B.yellow, border: `1px solid ${B.yellowDark}`, borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: showAdd ? B.textSecondary : B.black, fontFamily: fontHead, textTransform: 'uppercase', letterSpacing: '0.04em' }}
+            >
+              {showAdd ? 'Cancel' : '+ Add Member'}
+            </button>
+          )}
         </div>
+
+        {/* Add member (invite) form — owner only */}
+        {canManageMembers && showAdd && (
+          <div style={{ background: B.bg, border: `1px solid ${B.cardBorder}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                value={addForm.full_name}
+                onChange={e => setAddForm(f => ({ ...f, full_name: e.target.value }))}
+                placeholder="Full name (optional)"
+                style={{ ...iStyle, flex: '1 1 150px', minHeight: 36 }}
+              />
+              <input
+                type="email"
+                value={addForm.email}
+                onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="email@binnedit.com.au"
+                style={{ ...iStyle, flex: '1 1 200px', minHeight: 36 }}
+              />
+              <select
+                value={addForm.role}
+                onChange={e => setAddForm(f => ({ ...f, role: e.target.value }))}
+                style={{ ...iStyle, minHeight: 36 }}
+              >
+                {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+              <button
+                onClick={submitAdd}
+                disabled={addMut.isPending}
+                style={{ background: B.green, border: 'none', borderRadius: 6, color: '#fff', padding: '8px 16px', cursor: addMut.isPending ? 'wait' : 'pointer', fontSize: 12, fontWeight: 700, fontFamily: fontHead, textTransform: 'uppercase', minHeight: 36 }}
+              >
+                {addMut.isPending ? 'Sending…' : 'Send Invite'}
+              </button>
+            </div>
+            <div style={{ fontSize: 11, color: B.textMuted, marginTop: 8 }}>
+              Sends a magic-link invite to set a password. Restricted to company domains (binnedit.com.au / binned-it.com.au).
+            </div>
+            {addMsg && (
+              <div style={{ marginTop: 8, fontSize: 12, color: addMsg.ok ? B.green : B.red }}>
+                {addMsg.ok ? '✓ ' : '⚠ '}{addMsg.text}
+              </div>
+            )}
+          </div>
+        )}
 
         {membersLoading ? (
           <div style={{ color: B.textMuted, fontSize: 13 }}>Loading…</div>
@@ -195,12 +282,24 @@ export default function TeamPage() {
                           </button>
                         </>
                       ) : (
-                        <button
-                          onClick={() => startEdit(m)}
-                          style={{ background: 'none', border: `1px solid ${B.cardBorder}`, borderRadius: 4, color: B.textSecondary, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontFamily: fontHead }}
-                        >
-                          Edit
-                        </button>
+                        <>
+                          <button
+                            onClick={() => startEdit(m)}
+                            style={{ background: 'none', border: `1px solid ${B.cardBorder}`, borderRadius: 4, color: B.textSecondary, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontFamily: fontHead }}
+                          >
+                            Edit
+                          </button>
+                          {canManageMembers && m.id !== user?.id && (
+                            <button
+                              onClick={() => removeMember(m)}
+                              disabled={removeMut.isPending}
+                              title="Remove team member"
+                              style={{ background: 'none', border: `1px solid ${B.red}55`, borderRadius: 4, color: B.red, padding: '4px 10px', cursor: removeMut.isPending ? 'wait' : 'pointer', fontSize: 11, fontFamily: fontHead }}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   )}

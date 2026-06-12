@@ -50,9 +50,9 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
-  let email, role;
+  let email, role, fullName;
   try {
-    ({ email, role } = await req.json());
+    ({ email, role, fullName } = await req.json());
   } catch {
     return new Response(JSON.stringify({ error: 'Invalid request body' }), { status: 400 });
   }
@@ -157,7 +157,7 @@ export default async function handler(req) {
       body: JSON.stringify({
         id: userId,
         role,
-        full_name: email.split('@')[0],
+        full_name: (fullName && String(fullName).trim()) || email.split('@')[0],
         is_active: true,
         updated_at: new Date().toISOString(),
       }),
