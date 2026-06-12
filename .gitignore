@@ -55,3 +55,8 @@ supabase/.temp
 
 .vercel
 .env*.local
+
+# Android signing keystore — NEVER commit
+android.keystore
+*.keystore
+android-apk/app-release*
