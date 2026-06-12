@@ -67,3 +67,7 @@ Sourced from the `_skipsync_migrations` audit table at apply time.
 - sha256: `74e7b993b2c206347975eafe2073b110673ad3c53fb85640d665a15eb0c42e81`
 - duration: 1247 ms
 
+## 2026-06-12T08:10:05.751Z — 032_security_rls_lockdown.sql
+- sha256: `9cd697eb0cbbe868488fd90ed866788426244582897e9a6e524afd8e2f94d037`
+- duration: 1148 ms
+
