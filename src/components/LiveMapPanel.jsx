@@ -299,7 +299,11 @@ export default function LiveMapPanel({ bookings: bookingsProp, onSelectBooking, 
   }
 
   return (
-    <div data-testid="live-map-panel" style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 12, overflow: 'hidden', fontFamily: fontBody }}>
+    // isolation: 'isolate' confines Leaflet's high z-index controls (zoom/fit
+    // at z-1000, attribution) inside this container's own stacking context, so
+    // the app's side drawer (z-201) and chat panel correctly cover the map
+    // instead of the map controls bleeding through over them.
+    <div data-testid="live-map-panel" style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 12, overflow: 'hidden', fontFamily: fontBody, position: 'relative', zIndex: 0, isolation: 'isolate' }}>
       {/* ── Error strip (non-blocking; auto-retry via TanStack) ── */}
       {driversQuery.isError && (
         <div data-testid="live-map-error" style={{
