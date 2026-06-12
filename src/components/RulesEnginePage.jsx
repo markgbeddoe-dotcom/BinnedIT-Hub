@@ -532,7 +532,9 @@ export default function RulesEnginePage() {
 
   // ── Role gate: content-level, not just route-level ──
   const role = profile?.role
-  const allowed = role === 'owner' || role === 'manager'
+  // fleet_manager is manager-equivalent (AuthContext isManager) and the route
+  // already admits it — the content gate must match (assessment DEAD-4).
+  const allowed = role === 'owner' || role === 'manager' || role === 'fleet_manager'
 
   if (authLoading) {
     return (

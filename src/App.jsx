@@ -109,10 +109,10 @@ const menuItems = [
   {id:'history',icon:'🗓️',label:'Monthly History',section:null},
   {id:'month-select',icon:'📥',label:'Load Data',section:null},
   // System
-  {id:'settings',icon:'⚙️',label:'Settings',section:'SYSTEM'},
+  {id:'settings',icon:'⚙️',label:'Settings',section:'SYSTEM', managerOnly: true},
   {id:'rules',icon:'📐',label:'Rules Engine',section:null, managerOnly: true},
-  {id:'settings/audit',icon:'📜',label:'Audit Log',section:null, ownerOnly: true},
-  {id:'settings/team',icon:'👥',label:'Team',section:null, ownerOnly: true},
+  {id:'settings/audit',icon:'📜',label:'Audit Log',section:null, managerOnly: true},
+  {id:'settings/team',icon:'👥',label:'Team',section:null, managerOnly: true}, // managers have edit rights (assessment: was ownerOnly, blocking Tracey)
   {id:'about',icon:'ℹ️',label:'About',section:null},
 ];
 
@@ -704,7 +704,11 @@ export default function App() {
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/collections" element={<CollectionsPage />} />
         <Route path="/drivers" element={<DriverApp />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        {/* Assessment SEC-2: these were reachable by any role via URL paste.
+            Office-only at the route; owner-only controls inside stay isOwner-gated. */}
+        <Route path="/settings" element={
+          <RequireRole roles={['owner', 'manager', 'fleet_manager']}><SettingsPage /></RequireRole>
+        } />
         {/* WP-F (R6): rules engine — owner/manager/fleet_manager only (GAP-030) */}
         <Route path="/rules" element={
           <RequireRole roles={['owner', 'manager', 'fleet_manager']}>
@@ -718,8 +722,12 @@ export default function App() {
             <div style={{maxWidth:1100,margin:'0 auto',padding:'20px 24px'}}><WasteAuditPanel /></div>
           </RequireRole>
         } />
-        <Route path="/settings/audit" element={<AuditLogPage />} />
-        <Route path="/settings/team" element={<TeamPage />} />
+        <Route path="/settings/audit" element={
+          <RequireRole roles={['owner', 'manager', 'fleet_manager']}><AuditLogPage /></RequireRole>
+        } />
+        <Route path="/settings/team" element={
+          <RequireRole roles={['owner', 'manager', 'fleet_manager']}><TeamPage /></RequireRole>
+        } />
         <Route path="/about" element={<AboutScreen />} />
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>

@@ -305,20 +305,27 @@ function InvoiceRow({ invoice, isMobile, onAction }) {
 export default function CollectionsPage() {
   const { isMobile } = useBreakpoint()
   const { data: summary, isLoading, isError } = useCollectionsSummary()
-  const { data: overdueInvoices } = useOverdueInvoices()
+  const { data: overdueInvoices, isError: overdueError } = useOverdueInvoices()
   const createEvent = useCreateCollectionsEvent()
   const escalate = useEscalateInvoice()
   const [filterLevel, setFilterLevel] = useState('all')
   const [modal, setModal] = useState(null)
 
+  // CRITICAL (assessment HON-1): only show the demo dataset when the live
+  // query genuinely ERRORS. A legitimate empty result (no overdue invoices)
+  // must render an empty state — never fake debtors presented as real, which
+  // is dangerous on a transactional collections page.
+  const usingFallback = overdueError
+  const liveOrFallback = usingFallback ? FALLBACK_OVERDUE : (overdueInvoices || [])
+
   const invoices = useMemo(() => {
-    const raw = (overdueInvoices && overdueInvoices.length > 0 && !isError) ? overdueInvoices : FALLBACK_OVERDUE
+    const raw = liveOrFallback
     if (filterLevel === 'all') return raw
     return raw.filter(inv => inv.collectionsLevel === parseInt(filterLevel))
-  }, [overdueInvoices, filterLevel, isError])
+  }, [liveOrFallback, filterLevel])
 
   const stats = useMemo(() => {
-    const raw = (overdueInvoices && overdueInvoices.length > 0 && !isError) ? overdueInvoices : FALLBACK_OVERDUE
+    const raw = liveOrFallback
     return {
       total: raw.length,
       totalAmount: raw.reduce((s,i)=>s+parseFloat(i.total||0),0),
@@ -331,7 +338,7 @@ export default function CollectionsPage() {
       l3amt: raw.filter(i=>i.collectionsLevel===3).reduce((s,i)=>s+parseFloat(i.total||0),0),
       l4amt: raw.filter(i=>i.collectionsLevel===4).reduce((s,i)=>s+parseFloat(i.total||0),0),
     }
-  }, [overdueInvoices, isError])
+  }, [liveOrFallback])
 
   const handleAction = (type, invoice, level, customer) => {
     setModal({ type, invoice, level, customer })
@@ -495,6 +502,14 @@ export default function CollectionsPage() {
 
       {/* Invoice list */}
       {isLoading && <div style={{ textAlign:'center', padding:'40px', color:B.textMuted }}>Loading overdue accounts…</div>}
+      {usingFallback && (
+        <div style={{ marginBottom:16, background:`${B.amber}15`, border:`1px solid ${B.amber}`, borderRadius:10, padding:'12px 16px', display:'flex', gap:10, alignItems:'center' }}>
+          <span style={{ fontSize:18 }}>⚠️</span>
+          <div style={{ fontSize:13, color:B.textSecondary }}>
+            <strong style={{ color:B.amber }}>Sample data shown.</strong> The live collections feed couldn't be reached, so the figures below are illustrative — do not action these as real debtors.
+          </div>
+        </div>
+      )}
       {invoices.length === 0 && !isLoading && (
         <div style={{ ...cardBorder, textAlign:'center', padding:'48px', color:B.textMuted }}>
           <div style={{ fontSize:32, marginBottom:8 }}>✓</div>
