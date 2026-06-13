@@ -463,6 +463,20 @@ Claude vision analysis of collection photos — see the Driver app and Waste aud
 
 ---
 
+## Help screenshots
+
+Annotated screenshots that exist in the app at the paths below. These are the ONLY image paths that may be referenced in replies (as \`![Caption](/help/<file>.png)\`); never invent others.
+
+| Page | Path |
+|---|---|
+| Dispatch board | /help/dispatch.png |
+| Settings → Users & Roles | /help/settings-users.png |
+| Team & Staff page | /help/team.png |
+| Rules engine | /help/rules.png |
+| Invoices | /help/invoices.png |
+
+---
+
 ## Known limitations
 
 Things that exist in seeded/placeholder form, are deliberately disabled, or aren't built yet. The assistant should be upfront about these.

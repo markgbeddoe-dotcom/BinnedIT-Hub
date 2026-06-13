@@ -1,14 +1,57 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { B, fontHead, fontBody, fmtFull } from '../theme';
 import * as D from '../data/financials';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
-// Markdown-lite renderer — the assistant replies with **bold** and `code`
-// spans; render those (plus newlines via pre-wrap) without a markdown dep.
-function renderChatText(text) {
+// Markdown-lite renderer — the assistant replies with **bold**, `code`,
+// in-app links [Label](/route), external links [Label](https://…), and
+// images ![alt](/help/…png). Internal links navigate within the SPA via
+// onNavigate; no markdown dependency.
+function renderChatText(text, onNavigate) {
   if (!text) return text;
-  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) => {
+  const TOKEN = /(!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|`[^`]+`)/g;
+  return text.split(TOKEN).map((part, i) => {
+    // image: ![alt](url)
+    let m = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(part);
+    if (m) {
+      return (
+        <img
+          key={i}
+          src={m[2]}
+          alt={m[1]}
+          loading="lazy"
+          style={{ display: 'block', maxWidth: '100%', borderRadius: 8, border: `1px solid ${B.cardBorder}`, margin: '8px 0' }}
+        />
+      );
+    }
+    // link: [label](url)
+    m = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(part);
+    if (m) {
+      const label = m[1], url = m[2];
+      const internal = url.startsWith('/');
+      if (internal) {
+        return (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onNavigate(url)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              background: `${B.blue}15`, border: `1px solid ${B.blue}`, color: B.blue,
+              borderRadius: 6, padding: '1px 8px', margin: '0 1px', fontSize: 12,
+              fontFamily: fontBody, cursor: 'pointer', verticalAlign: 'baseline',
+            }}
+          >
+            {label} <span style={{ fontSize: 10 }}>↗</span>
+          </button>
+        );
+      }
+      return (
+        <a key={i} href={url} target="_blank" rel="noopener noreferrer" style={{ color: B.blue }}>{label}</a>
+      );
+    }
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={i}>{part.slice(2, -2)}</strong>;
     }
@@ -54,6 +97,14 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef(null);
   const chatInputRef = useRef(null);
+  const navigate = useNavigate();
+
+  // Click on an in-app link the assistant emitted → navigate there. On mobile,
+  // close the chat so the page is visible; on desktop keep it open alongside.
+  const handleChatNavigate = (path) => {
+    navigate(path);
+    if (isMobile) onClose?.();
+  };
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -229,7 +280,7 @@ export default function ChatPanel({ open, onClose, selectedMonth, monthCount, se
                 )}
                 {(m.text || m.role === 'user' || (m.activity || []).length === 0) && (
                   <div style={{ background: m.role === 'user' ? B.yellow : B.bg, color: m.role === 'user' ? '#fff' : B.textPrimary, borderRadius: 12, padding: '10px 14px', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                    {m.text ? renderChatText(m.text) : (m.role === 'assistant' && chatLoading ? '...' : '')}
+                    {m.text ? renderChatText(m.text, handleChatNavigate) : (m.role === 'assistant' && chatLoading ? '...' : '')}
                   </div>
                 )}
               </div>
