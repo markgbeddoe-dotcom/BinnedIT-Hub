@@ -21,6 +21,12 @@
 - AI bulk assignment hard-capped at 20 per request.
 
 ## Learnings Log
+### 2026-06-13
+- **Map overlay bug, root cause:** Leaflet hardcodes z-index up to 1000 on its panes/controls, which sat above the side menu and chat panel because LiveMapPanel shared the page's stacking context. Fix isolates the panel in its own stacking context (`isolation`/`position`+`z-index` on the container) so Leaflet's internals can't compete with app chrome. *Next-run change:* never fix an overlay fight by raising the other element's z-index — contain the third-party widget instead; and after any map change, open the side menu AND the chat panel over the map before sign-off (map-overlap-*.png show the failure and fix).
+
+### 2026-06-12 (backfill)
+- J3 proven live this date (assigned a live job to Test Driver via the panel; pending→scheduled rule fired; driver saw it) — recorded on the Journey Board at the time but this log wasn't appended, which violates the closing protocol. Backfilled now so the next session doesn't re-derive it.
+
 ### 2026-06-11
 - Overnight parallel build shipped the Assignment panel without threading its props to `KanbanColumn`/`NewJobModal` — expanding any card would crash the whole board. Caught by adversarial review before deploy, but it had passed unit tests and build. *Next-run change:* after any board change, this persona expands a card, opens + New Job, and drags one card before sign-off — clicks, not code review.
 - Empty roster degrades correctly ("No drivers yet — add in Team page", disabled controls) — verified live.

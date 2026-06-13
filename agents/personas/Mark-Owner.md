@@ -24,6 +24,10 @@
 - Adding a driver requires BOTH a driver-role profile AND an active truck in Fleet before dispatch works end-to-end.
 
 ## Learnings Log
+### 2026-06-13
+- **Team page completed:** Add Member (invite with name/email/role) + Remove, both owner-only. Removal goes through `api/remove-user.js`, which deletes the auth user AND the profile row in one call — previously there was no way to remove anyone, and a profiles-only delete would have left a live auth user who could still sign in. *Next-run change:* when this persona tests any "remove/delete person" flow, verify the auth user is gone (sign-in attempt fails), not just that the row left the UI.
+- **AI chat deep links (J10 extension):** assistant replies now carry tap-to-navigate `[Page](/route)` buttons and inline `/help/*.png` screenshots. QA'd locally only — **needs a live run on the deploy** (ask "how do I add a team member", tap the link, confirm SPA navigation + screenshot renders + chat closes on mobile; also confirm it doesn't link a role somewhere they'd be bounced from). Root-cause note: the feature shipped with the prompt referencing a manual screenshot list that didn't exist — caught and fixed at session close before deploy.
+
 ### 2026-06-11
 - **Root cause found by Mark, not QA:** invite dropdown and `api/invite.js` allowed only 4 of 7 roles, so drivers could never be added. Fixed (all 7 roles) + Settings rebuilt into 5 activity tabs with a Users & Roles section and permissions matrix. *Next-run change:* this persona always exercises EVERY option in a dropdown it tests, not just the default.
 - J2 (Team tab member management) reported broken by Mark. Untriaged. Prime suspect: `profiles` UPDATE RLS allows own-row only, so the UI's edit of other members silently no-ops. *Next run:* attempt the edit as owner in the UI, then check the row server-side; if RLS is the cause, fix policy (owner/manager may update profiles) via migration.
