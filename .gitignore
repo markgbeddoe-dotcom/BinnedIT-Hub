@@ -41,6 +41,8 @@ playwright-report/
 *.png
 qa-*.png
 mobile-*.png
+# ...but help screenshots are shipped app assets the AI chat links to
+!public/help/*.png
 
 # Claude Code per-project state (never commit)
 .claude/
